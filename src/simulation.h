@@ -1,8 +1,25 @@
 #ifndef SIMULATION_H_
 #define SIMULATION_H_
 
-struct Vector3D {
-    double x, y, z;
+#include "vector.h"
+#include <stdio.h>
+
+
+struct config {
+  int print;
+  int number;
+  int saveflag;
+  int xyzflag;
+  int start;
+  int step;
+  int stop;
+  int helium_number;
+  double mass;
+  double velocity;
+  double dt;
+  double max_time;
+  double icd_dist;
+  char force_file[50];
 };
 
 struct Particle_Pair {
@@ -14,36 +31,41 @@ struct Particle_Pair {
     double p1_velocity;
     double p2_velocity;
 
-    struct Vector3D p1_pos;
-    struct Vector3D p2_pos;
+    Vector3D p1_pos;
+    Vector3D p2_pos;
+    Quat p1_qua;
+    Quat p2_qua;
+    Vector3D p1_angvel;
+    Vector3D p2_angvel;
 
-    struct Vector3D p1_angvel;
-    struct Vector3D p2_angvel;
+    Vector3D p1_vel;
+    Vector3D p2_vel;
 
+    Vector3D p1_force;
+    Vector3D p2_force;
 };
 
-double distance_between_pair(struct Particle_Pair *particle);
-double distance(struct Vector3D *v1, struct Vector3D *v2);
-void cross_product(struct Vector3D *v1,
-                   struct Vector3D *v2,
-                   struct Vector3D *res);
-double norm(struct Vector3D *vec);
-void normalize(struct Vector3D *vec, struct Vector3D *res);
-void scalar_multiply(double scalar,
-                     struct Vector3D *vec,
-                     struct Vector3D *res);
-void add_vectors(struct Vector3D *v1, struct Vector3D *v2, struct Vector3D *res);
-double dot_product(struct Vector3D *v1, struct Vector3D *v2);
-void rotate_vector(struct Vector3D* v, struct Vector3D* axis, double angle, struct Vector3D* result);
-
-int initialize_particle_pair(double radius,
-                             double velocity,
-                             struct Particle_Pair *particle,
-                             int no_of_particles);
-void simulate_particle(double radius,
-                       int list_size,
-                       double *rlist, double *force_list,
+int read_config(const char *filename, struct config *conf);
+double distance_between_pair(const struct Particle_Pair *particle);
+int initialize_particle_pair(const double radius,
+                             const struct config *conf,
+                             struct Particle_Pair *particle);
+void simulate_particle(const struct config *conf,
+                       const double radius, const int list_size,
+                       const double *rlist, const double *force_list,
                        struct Particle_Pair *particle);
-double find_force(double distance, int list_size,
-                  double *rlist, double *force_list);
+double find_force(const double distance, const int list_size,
+                  const double *rlist, const double *force_list);
+
+void find_accelration(const double mass, const double radius,
+                      const Vector3D *pos, const Vector3D *force,
+                      Vector3D *acc);
+void update_angvel(const double timestep, const Vector3D *oldangvel,
+                   const Vector3D *acc, Vector3D *newangvel);
+void update_orientation(const double radius, const double timestep,
+                        Quat *orient, const Vector3D *angvel,
+                        Vector3D *pos);
+
+void save_particle_pair(FILE *fpointer, const struct Particle_Pair *particle);
+void create_xyz_file(const int tindex, const struct Particle_Pair *particle);
 #endif
