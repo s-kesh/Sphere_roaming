@@ -21,12 +21,14 @@ void print_configuration(const struct config *conf) {
     printf("dt = %lf\n", conf->dt);
     printf("max_time = %lf\n", conf->max_time);
     printf("icd_dist = %lf\n", conf->icd_dist);
+    printf("force_grid = %lf\n", conf->force_grid);
+    printf("force_grid_length = %ld\n", conf->force_grid_length);
     printf("force_file = %s\n", conf->force_file);
 }
 
 
 void simulate_for_number(const int helium_number, const struct config *conf,
-                         const int count, const double *rlist, const double *Flist) {
+                         const double *rlist, const double *Flist) {
   // Calculate radius of droplet
   double radius = 2.22 * pow((double)helium_number, 1.0/3.0);
 
@@ -63,7 +65,7 @@ void simulate_for_number(const int helium_number, const struct config *conf,
 
   #pragma omp parallel for
   for (int i = 0; i < conf->number; ++i)
-    simulate_particle(conf, radius, count - 1, rlist,
+    simulate_particle(conf, radius, rlist,
                       Flist, particles + i);
 
   // Write particle properties in a file
@@ -116,13 +118,13 @@ int main(int argc, char *argv[]) {
   }
 
   // Read the potential file and store the values into arrays
-  double* rF = (double *)malloc(1000000 * sizeof(double)); // radius array
-  double* Flist = (double *)malloc(1000000 * sizeof(double)); // Singlet_Single array
+  double* rF = (double *)malloc(con.force_grid_length * sizeof(double)); // radius array
+  double* Flist = (double *)malloc(con.force_grid_length * sizeof(double)); // Singlet_Single array
   double yst; // Singlet_Triplet array
   double ytt; // Triplet_Triplet array
 
   int count = 0;
-  while (fscanf(fitfile, "%lf\t%lf\t%lf\t%lf\n", rF + count, Flist + count, &yst, &ytt) == 4) {
+  while (fscanf(fitfile, "%lf\t%lf\t%lf\t%lf\n", rF + count, Flist + count, &yst, &ytt) == 4 && count < con.force_grid_length) {
     count++;
   }
   fclose(fitfile);
@@ -145,9 +147,9 @@ int main(int argc, char *argv[]) {
   if (con.start)
     for (helium_number = con.start; helium_number < con.stop;
          helium_number += con.step)
-      simulate_for_number(helium_number, &con, count, rF, Flist);
+      simulate_for_number(helium_number, &con, rF, Flist);
   else
-    simulate_for_number(helium_number, &con, count, rF, Flist);
+    simulate_for_number(helium_number, &con, rF, Flist);
 
   free(rF);
   free(Flist);

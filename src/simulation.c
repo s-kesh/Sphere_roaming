@@ -1,7 +1,6 @@
 #include "simulation.h"
 #include "vector.h"
 #include <math.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 #include <string.h>
@@ -15,7 +14,6 @@ int read_config(const char *filename, struct config *conf) {
     perror("Error opening file");
     return 0;
   }
-
 
   char line[256];
   while (fgets(line, sizeof(line), ff)) {
@@ -54,12 +52,16 @@ int read_config(const char *filename, struct config *conf) {
         conf->max_time = atof(value);
       else if (strcmp(key, "icd_dist") == 0)
         conf->icd_dist = atof(value);
+      else if (strcmp(key, "force_grid") == 0)
+        conf->force_grid = atof(value);
+      else if (strcmp(key, "force_grid_length") == 0)
+        conf->force_grid_length = atoi(value);
       else if (strcmp(key, "force_file") == 0)
         strcpy(conf->force_file, value);
     }
   }
-  return 1;
   fclose(ff);
+  return 1;
 }
 
 double distance_between_pair(const struct Particle_Pair *particle) {
@@ -178,11 +180,12 @@ int initialize_particle_pair(const double radius,
 }
 
 double find_force(const double distance, const int list_size,
+                  const double gridsize,
                   const double *rlist, const double *force_list) {
   int indx = 0;
   if (distance < rlist[0]) indx = 0;
   else if (distance > rlist[list_size - 1]) indx = list_size - 2;
-  else indx = (int)((distance - rlist[0]) / 0.001);
+  else indx = (int)((distance - rlist[0]) / gridsize);
   return -1 * force_list[indx] * 9.6485332E-03;
 }
 
@@ -307,7 +310,7 @@ void create_xyz_file(const int tindex, const struct Particle_Pair *particle) {
 }
 
 void simulate_particle(const struct config *conf,
-                       const double radius, const int list_size,
+                       const double radius,
                        const double *rlist, const double *force_list,
                        struct Particle_Pair *particle) {
 
@@ -361,7 +364,7 @@ void simulate_particle(const struct config *conf,
       create_xyz_file(tindex, particle);
 
     // Find Force
-    forcemag = find_force(particle->distance, list_size, rlist, force_list);
+    forcemag = find_force(particle->distance, conf->force_grid_length-1, conf->force_grid, rlist, force_list);
     // If force is less than 1E-10 amu.Å.fs¯² (10 neV/Å, 1E-17 N)
     // Consider it zero
     if (fabs(forcemag) - 1E-10 > 0) {
@@ -401,7 +404,7 @@ void simulate_particle(const struct config *conf,
     }
  
     // Check force again
-    forcemag = find_force(particle->distance, list_size, rlist, force_list);
+    forcemag = find_force(particle->distance, conf->force_grid_length-1, conf->force_grid, rlist, force_list);
 
     if (fabs(forcemag) - 1E-10 > 0) {
       // Step 4: Find the torque at new position

@@ -4,7 +4,6 @@
 #include "vector.h"
 #include <stdio.h>
 
-
 struct config {
   int print;
   int number;
@@ -19,6 +18,8 @@ struct config {
   double dt;
   double max_time;
   double icd_dist;
+  double force_grid;
+  long force_grid_length;
   char force_file[50];
 };
 
@@ -51,10 +52,10 @@ int initialize_particle_pair(const double radius,
                              const struct config *conf,
                              struct Particle_Pair *particle);
 void simulate_particle(const struct config *conf,
-                       const double radius, const int list_size,
+                       const double radius,
                        const double *rlist, const double *force_list,
                        struct Particle_Pair *particle);
-double find_force(const double distance, const int list_size,
+double find_force(const double distance, const int list_size, const double gridsize,
                   const double *rlist, const double *force_list);
 
 void find_accelration(const double mass, const double radius,
