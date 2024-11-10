@@ -22,13 +22,14 @@ void print_configuration(const struct config *conf) {
     printf("max_time = %lf\n", conf->max_time);
     printf("icd_dist = %lf\n", conf->icd_dist);
     printf("force_grid = %lf\n", conf->force_grid);
+    printf("force_grid_start = %lf\n", conf->force_grid_start);
     printf("force_grid_length = %ld\n", conf->force_grid_length);
     printf("force_file = %s\n", conf->force_file);
 }
 
 
 void simulate_for_number(const int helium_number, const struct config *conf,
-                         const double *rlist, const double *Flist) {
+                         const double *Flist) {
   // Calculate radius of droplet
   double radius = 2.22 * pow((double)helium_number, 1.0/3.0);
 
@@ -36,7 +37,7 @@ void simulate_for_number(const int helium_number, const struct config *conf,
   struct Particle_Pair *particles = (struct Particle_Pair *)malloc(conf->number * sizeof(struct Particle_Pair));
 
   // Initialize random particleSimulation
-  initialize_particle_pair(radius, conf, particles);
+  initialize_particle_pair(radius, conf, Flist, particles);
 
   // Write particle properties in a file
   char ffname[80];
@@ -44,8 +45,8 @@ void simulate_for_number(const int helium_number, const struct config *conf,
   sprintf(ffname, "./results/particlefile_%d.txt", helium_number);
   ffile = fopen(ffname, "w");
   fprintf(ffile,
-          "Index\tSuccess\tTime\tDistance\t"
-          "Vel_1\tVel_2\t"
+          "Index\tSuccess\tTime\tDistance_Sq\t"
+          "Vel_Sq_1\tVel_Sq_2\tForce\t"
           "QA_1\tQX_1\tQY_1\tQZ_1\t"
           "QA_2\tQX_2\tQY_2\tQZ_2\t"
           "X_1\tY_1\tZ_1\t"
@@ -65,15 +66,14 @@ void simulate_for_number(const int helium_number, const struct config *conf,
 
   #pragma omp parallel for
   for (int i = 0; i < conf->number; ++i)
-    simulate_particle(conf, radius, rlist,
-                      Flist, particles + i);
+    simulate_particle(conf, radius, Flist, particles + i);
 
   // Write particle properties in a file
   sprintf(ffname, "./results/particlefile_after_%d.txt", helium_number);
   ffile = fopen(ffname, "w");
   fprintf(ffile,
-          "Index\tSuccess\tTime\tDistance\t"
-          "Vel_1\tVel_2\t"
+          "Index\tSuccess\tTime\tDistance_Sq\t"
+          "Vel_Sq_1\tVel_Sq_2\tForce\t"
           "QA_1\tQX_1\tQY_1\tQZ_1\t"
           "QA_2\tQX_2\tQY_2\tQZ_2\t"
           "X_1\tY_1\tZ_1\t"
@@ -118,13 +118,13 @@ int main(int argc, char *argv[]) {
   }
 
   // Read the potential file and store the values into arrays
-  double* rF = (double *)malloc(con.force_grid_length * sizeof(double)); // radius array
   double* Flist = (double *)malloc(con.force_grid_length * sizeof(double)); // Singlet_Single array
+  double rF;
   double yst; // Singlet_Triplet array
   double ytt; // Triplet_Triplet array
 
   int count = 0;
-  while (fscanf(fitfile, "%lf\t%lf\t%lf\t%lf\n", rF + count, Flist + count, &yst, &ytt) == 4 && count < con.force_grid_length) {
+  while (fscanf(fitfile, "%lf\t%lf\t%lf\t%lf\n", &rF, Flist + count, &yst, &ytt) == 4 && count < con.force_grid_length) {
     count++;
   }
   fclose(fitfile);
@@ -138,20 +138,19 @@ int main(int argc, char *argv[]) {
   // Save forcelist
   char fffname[80] = "./results/forcelist.txt";
   FILE *fffile = fopen(fffname, "w");
-  fprintf(fffile, "Radius\tForce\n");
+  fprintf(fffile, "Distance_Squared\tForce\n");
   for (int i = 0; i < count; ++i) {
-    fprintf(fffile, "%lf\t%lf\n", rF[i], Flist[i]);
+    fprintf(fffile, "%lf\t%.10e\n", con.force_grid_start + con.force_grid*i, Flist[i]);
   }
 
   int helium_number = con.helium_number;
   if (con.start)
     for (helium_number = con.start; helium_number < con.stop;
          helium_number += con.step)
-      simulate_for_number(helium_number, &con, rF, Flist);
+      simulate_for_number(helium_number, &con, Flist);
   else
-    simulate_for_number(helium_number, &con, rF, Flist);
+    simulate_for_number(helium_number, &con, Flist);
 
-  free(rF);
   free(Flist);
   return 0;
 }

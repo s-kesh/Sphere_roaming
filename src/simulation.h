@@ -19,45 +19,45 @@ struct config {
   double max_time;
   double icd_dist;
   double force_grid;
+  double force_grid_start;
   long force_grid_length;
   char force_file[50];
 };
 
 struct Particle_Pair {
-    unsigned int success;
-    unsigned int index;
-    double time;
-    double distance;
+  unsigned int success;
+  unsigned int index;
+  double time;
+  double distance_sq;
 
-    double p1_velocity;
-    double p2_velocity;
+  double p1_velocity_sq;
+  double p2_velocity_sq;
+  double force;
 
-    Vector3D p1_pos;
-    Vector3D p2_pos;
-    Quat p1_qua;
-    Quat p2_qua;
-    Vector3D p1_angvel;
-    Vector3D p2_angvel;
+  Vector3D p1_pos;
+  Vector3D p2_pos;
+  Quat p1_qua;
+  Quat p2_qua;
+  Vector3D p1_angvel;
+  Vector3D p2_angvel;
 
-    Vector3D p1_vel;
-    Vector3D p2_vel;
+  Vector3D p1_vel;
+  Vector3D p2_vel;
 
-    Vector3D p1_force;
-    Vector3D p2_force;
+  Vector3D p1_force;
+  Vector3D p2_force;
 };
 
 int read_config(const char *filename, struct config *conf);
-double distance_between_pair(const struct Particle_Pair *particle);
+double distancesq_between_pair(const struct Particle_Pair *particle);
 int initialize_particle_pair(const double radius,
                              const struct config *conf,
+                             const double *Force_list,
                              struct Particle_Pair *particle);
 void simulate_particle(const struct config *conf,
                        const double radius,
-                       const double *rlist, const double *force_list,
+                       const double *force_list,
                        struct Particle_Pair *particle);
-double find_force(const double distance, const int list_size, const double gridsize,
-                  const double *rlist, const double *force_list);
-
 void find_accelration(const double mass, const double radius,
                       const Vector3D *pos, const Vector3D *force,
                       Vector3D *acc);

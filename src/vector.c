@@ -2,8 +2,16 @@
 #include <math.h>
 #include <stdlib.h>
 
-double distance(const Vector3D *v1, const Vector3D *v2) {
 
+double distance_sq(const Vector3D *v1, const Vector3D *v2) {
+    double xx = (v1->x - v2->x);
+    double yy = (v1->y - v2->y);
+    double zz = (v1->z - v2->z);
+
+    return xx*xx + yy*yy + zz*zz;
+}
+
+double distance(const Vector3D *v1, const Vector3D *v2) {
     double xx = (v1->x - v2->x);
     double yy = (v1->y - v2->y);
     double zz = (v1->z - v2->z);
@@ -21,6 +29,10 @@ void cross_product(const Vector3D *v1,
 
 double norm(const Vector3D *v1) {
   return sqrt(v1->x*v1->x + v1->y*v1->y + v1->z*v1->z);
+}
+
+double norm_sq(const Vector3D *v1) {
+  return v1->x*v1->x + v1->y*v1->y + v1->z*v1->z;
 }
 
 void normalize(const Vector3D *vec, Vector3D *res) {
@@ -64,6 +76,23 @@ void rotate_vector(const Vector3D *v,
     result->y = cosTheta * v->y + sinTheta * (axis->z * v->x - axis->x * v->z) + (1 - cosTheta) * dot * axis->y;
     result->z = cosTheta * v->z + sinTheta * (axis->x * v->y - axis->y * v->x) + (1 - cosTheta) * dot * axis->z;
 }
+
+void create_perpend_vector(const Vector3D *vec, Vector3D *res) {
+  // Create a vector 'a' which is not parallel to vec
+  Vector3D a = {0, 0, 0};
+  if (vec->x != 0 || vec->y != 0) {
+    a.x = -1 * vec->y;
+    a.y = vec->x;
+    a.z = 0;
+  } else {
+    a.x = 0;
+    a.y = -1 * vec->z;
+    a.z = vec->y;
+  }
+  // Take a cross product
+  cross_product(&a, vec, res);
+}
+
 
 
 void quat_to_pos(const Quat *q, Vector3D *pos) {
@@ -111,8 +140,11 @@ void quat_scalar_multiply(const Quat *q, const double scalar, Quat *result) {
 }
 
 double quat_norm(const Quat *q) {
-    double mag = sqrt(q->a * q->a + q->x * q->x + q->y * q->y + q->z * q->z);
-    return mag;
+    return sqrt(q->a * q->a + q->x * q->x + q->y * q->y + q->z * q->z);
+}
+
+double quat_norm_sq(const Quat *q) {
+    return q->a * q->a + q->x * q->x + q->y * q->y + q->z * q->z;
 }
 
 // Function to calculate the dot product of two quaternions (using vector part only)
@@ -138,26 +170,20 @@ void quat_conjugate(const Quat *q, Quat *result) {
 
 // Function to calculate the inverse of a quaternion
 void quat_inverse(const Quat *q, Quat *result) {
-    double norm_sq = q->a * q->a + q->x * q->x + q->y * q->y + q->z * q->z;
     Quat conjugate;
     quat_conjugate(q, &conjugate);
-    quat_scalar_multiply(&conjugate, 1.0 / norm_sq, result);
+    quat_scalar_multiply(&conjugate, 1.0 / quat_norm_sq(q), result);
 }
 
 // Function to rotate a vector using a quaternion
 void quat_rotate_vector(const Quat *q, const Vector3D *v, Quat *result) {
-    // Normalize the quaternion (not always necessary but ensures unit quaternion)
-    double norm = quat_norm(q);
-    Quat unit_q;
-    quat_scalar_multiply(q, 1.0 / norm, &unit_q);
-
     // The vector as a quaternion with 0 as the scalar part
     Quat vector_q = {0, v->x, v->y, v->z};
 
     // Apply the rotation: v' = q * v * q^-1
     Quat q_inv;
-    quat_inverse(&unit_q, &q_inv);
+    quat_inverse(q, &q_inv);
     Quat temp_result;
-    quat_product(&unit_q, &vector_q, &temp_result);
+    quat_product(q, &vector_q, &temp_result);
     quat_product(&temp_result, &q_inv, result);
 }

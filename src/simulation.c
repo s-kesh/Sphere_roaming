@@ -54,6 +54,8 @@ int read_config(const char *filename, struct config *conf) {
         conf->icd_dist = atof(value);
       else if (strcmp(key, "force_grid") == 0)
         conf->force_grid = atof(value);
+      else if (strcmp(key, "force_grid_start") == 0)
+        conf->force_grid_start = atof(value);
       else if (strcmp(key, "force_grid_length") == 0)
         conf->force_grid_length = atoi(value);
       else if (strcmp(key, "force_file") == 0)
@@ -64,7 +66,7 @@ int read_config(const char *filename, struct config *conf) {
   return 1;
 }
 
-double distance_between_pair(const struct Particle_Pair *particle) {
+double distancesq_between_pair(const struct Particle_Pair *particle) {
     // Position of particle 1
     double x1   = particle->p1_pos.x;
     double y1   = particle->p1_pos.y;
@@ -79,21 +81,28 @@ double distance_between_pair(const struct Particle_Pair *particle) {
     double yy = (y1 - y2);
     double zz = (z1 - z2);
 
-    return sqrt(xx*xx + yy*yy + zz*zz);
+    return xx*xx + yy*yy + zz*zz;
 }
 
 int initialize_particle_pair(const double radius,
                              const struct config *conf,
+                             const double *force_list,
                              struct Particle_Pair *particle) {
   double dist = 0.0;
+  double inv_grid_size = 1.0 / conf->force_grid;
+  double force_start = conf->force_grid_start;
+
   struct Particle_Pair *par = NULL;
   Quat q1 = {0, 0, 0, 0};
   Vector3D pos1 = {0, 0, 0};
   Quat q2 = {0, 0, 0, 0};
   Vector3D pos2 = {0, 0, 0};
-  Vector3D a = {0, 0, 0};
   Vector3D res = {0, 0, 0};
-  double ang_vel = (1E-5 * conf->velocity) / radius; // Unit fs¯¹
+
+  const double ang_vel = (1E-5 * conf->velocity) / radius; // Unit fs¯¹
+  const double velocity_sq = conf->velocity * conf->velocity * 1E-10; // Convert m/s to Å/fs
+  const double icd_dist2 = conf->icd_dist*conf->icd_dist;
+  const double max_dist_sq = conf->force_grid_start + (conf->force_grid_length - 2) * conf->force_grid;
 
   // Setup random number generator
   srand(100401430);
@@ -110,15 +119,15 @@ int initialize_particle_pair(const double radius,
         quat_random(&q2);
         quat_to_pos(&q2, &pos2);
         scalar_multiply(radius, &pos2, &pos2);
-        dist = distance(&pos1, &pos2);
-      } while (dist < conf->icd_dist);
+        dist = distance_sq(&pos1, &pos2);
+      } while (dist < icd_dist2);
 
 
       // Set pair position
       par->index = i;
       par->success = 0;
       par->time = 0;
-      par->distance = dist;
+      par->distance_sq = dist;
 
       par->p1_qua = q1;
       par->p2_qua = q2;
@@ -126,67 +135,38 @@ int initialize_particle_pair(const double radius,
       par->p2_pos = pos2;
 
       // Generate random angular velocity
-      par->p1_velocity = 1E-5 * conf->velocity; // Convert m/s to Å/fs
-      par->p2_velocity = 1E-5 * conf->velocity; // Convert m/s to Å/fs
+      par->p1_velocity_sq = velocity_sq;
+      par->p2_velocity_sq = velocity_sq;
 
       // Need to find the perpenducular vector to position
-      // Create a vector 'a' which is not parallel to position vector
-      if (par->p1_pos.x != 0 || par->p1_pos.y != 0) {
-        a.x = -1 * par->p1_pos.y;
-        a.y = par->p1_pos.x;
-        a.z = 0;
-      } else {
-        a.x = 0;
-        a.y = -1 * par->p1_pos.z;
-        a.z = par->p1_pos.y;
-      }
-      // Take a cross product
-      cross_product(&a, &(par->p1_pos), &res);
-      double mag = norm(&res);
-      // Create angular Velocity vector
-      scalar_multiply(ang_vel/mag, &res, &(par->p1_angvel));
-
-      // Need to find the perpenducular vector to position
-      // Create a vector 'a' which is not parallel to position vector
-      if (par->p2_pos.x != 0 || par->p2_pos.y != 0) {
-        a.x = -1 * par->p2_pos.y;
-        a.y = par->p2_pos.x;
-        a.z = 0;
-      } else {
-        a.x = 0;
-        a.y = -1 * par->p2_pos.z;
-        a.z = par->p2_pos.y;
-      }
-      // Take a cross product
-      cross_product(&a, &(par->p2_pos), &res);
-      mag = norm(&res);
-      // Create angular Velocity vector
-      scalar_multiply(ang_vel/mag, &res, &(par->p2_angvel));
+      create_perpend_vector(&(par->p1_pos), &res);
+      scalar_multiply(ang_vel/norm(&res), &res, &(par->p1_angvel));
+      create_perpend_vector(&(par->p2_pos), &res);
+      scalar_multiply(ang_vel/norm(&res), &res, &(par->p2_angvel));
 
       // Calculate velocity
       cross_product(&(par->p1_pos), &(par->p1_angvel), &(par->p1_vel));
       cross_product(&(par->p2_pos), &(par->p2_angvel), &(par->p2_vel));
 
-      // Set force to zero
-      par->p1_force.x = 0;
-      par->p1_force.y = 0;
-      par->p1_force.z = 0;
-      par->p2_force.x = 0;
-      par->p2_force.y = 0;
-      par->p2_force.z = 0;
+      // Find force initially
+      if (particle->distance_sq > max_dist_sq) {
+        particle->force = 0;
+        particle->p1_force.x = 0.0;
+        particle->p1_force.y = 0.0;
+        particle->p1_force.z = 0.0;
+        particle->p2_force.x = 0.0;
+        particle->p2_force.y = 0.0;
+        particle->p2_force.z = 0.0;
+      }
+      else {
+        particle->force = force_list[(int)((particle->distance_sq - force_start) * inv_grid_size)];
+        particle->p1_force.x = particle->force * (particle->p1_pos.x - particle->p2_pos.x) / sqrt(particle->distance_sq);
+        particle->p1_force.y = particle->force * (particle->p1_pos.y - particle->p2_pos.y) / sqrt(particle->distance_sq);
+        particle->p1_force.z = particle->force * (particle->p1_pos.z - particle->p2_pos.z) / sqrt(particle->distance_sq);
+        scalar_multiply(-1, &(particle->p1_force), &(particle->p2_force));
+      }
   }
-
   return 0;
-}
-
-double find_force(const double distance, const int list_size,
-                  const double gridsize,
-                  const double *rlist, const double *force_list) {
-  int indx = 0;
-  if (distance < rlist[0]) indx = 0;
-  else if (distance > rlist[list_size - 1]) indx = list_size - 2;
-  else indx = (int)((distance - rlist[0]) / gridsize);
-  return -1 * force_list[indx] * 9.6485332E-03;
 }
 
 void find_accelration(const double mass,
@@ -227,53 +207,56 @@ void update_orientation(const double radius,
 }
 
 void save_particle_pair(FILE *fpointer, const struct Particle_Pair *particle) {
-      fprintf(fpointer, "%d\t%d\t%.10lf\t%.10lf\t"
-              "%.10lf\t%.10lf\t"
-              "%.10lf\t%.10lf\t%.10lf\t%.10lf\t"
-              "%.10lf\t%.10lf\t%.10lf\t%.10lf\t"
-              "%.10lf\t%.10lf\t%.10lf\t"
-              "%.10lf\t%.10lf\t%.10lf\t"
-              "%.10lf\t%.10lf\t%.10lf\t"
-              "%.10lf\t%.10lf\t%.10lf\t"
-              "%.10lf\t%.10lf\t%.10lf\t"
-              "%.10lf\t%.10lf\t%.10lf\t"
-              "%.10lf\t%.10lf\t%.10lf\t"
-              "%.10lf\t%.10lf\t%.10lf\n",
-              particle->index, particle->success,
-              particle->time, particle->distance,
-              particle->p1_velocity, particle->p2_velocity,
-              particle->p1_qua.a,
-              particle->p1_qua.x,
-              particle->p1_qua.y,
-              particle->p1_qua.z,
-              particle->p2_qua.a,
-              particle->p2_qua.x,
-              particle->p2_qua.y,
-              particle->p2_qua.z,
-              particle->p1_pos.x,
-              particle->p1_pos.y,
-              particle->p1_pos.z,
-              particle->p2_pos.x,
-              particle->p2_pos.y,
-              particle->p2_pos.z,
-              particle->p1_vel.x,
-              particle->p1_vel.y,
-              particle->p1_vel.z,
-              particle->p2_vel.x,
-              particle->p2_vel.y,
-              particle->p2_vel.z,
-              particle->p1_force.x,
-              particle->p1_force.y,
-              particle->p1_force.z,
-              particle->p2_force.x,
-              particle->p2_force.y,
-              particle->p2_force.z,
-              particle->p1_angvel.x,
-              particle->p1_angvel.y,
-              particle->p1_angvel.z,
-              particle->p2_angvel.x,
-              particle->p2_angvel.y,
-              particle->p2_angvel.z);
+  fprintf(fpointer,
+          "%d\t%d\t%.10lf\t%.10lf\t"
+          "%.10e\t%.10e\t%.10e\t"
+          "%.10e\t%.10e\t%.10e\t%.10e\t"
+          "%.10e\t%.10e\t%.10e\t%.10e\t"
+          "%.10e\t%.10e\t%.10e\t"
+          "%.10e\t%.10e\t%.10e\t"
+          "%.10e\t%.10e\t%.10e\t"
+          "%.10e\t%.10e\t%.10e\t"
+          "%.10e\t%.10e\t%.10e\t"
+          "%.10e\t%.10e\t%.10e\t"
+          "%.10e\t%.10e\t%.10e\t"
+          "%.10e\t%.10e\t%.10e\n",
+          particle->index, particle->success, particle->time,
+          particle->distance_sq,
+          particle->p1_velocity_sq,
+          particle->p2_velocity_sq,
+          particle->force,
+          particle->p1_qua.a,
+          particle->p1_qua.x,
+          particle->p1_qua.y,
+          particle->p1_qua.z,
+          particle->p2_qua.a,
+          particle->p2_qua.x,
+          particle->p2_qua.y,
+          particle->p2_qua.z,
+          particle->p1_pos.x,
+          particle->p1_pos.y,
+          particle->p1_pos.z,
+          particle->p2_pos.x,
+          particle->p2_pos.y,
+          particle->p2_pos.z,
+          particle->p1_vel.x,
+          particle->p1_vel.y,
+          particle->p1_vel.z,
+          particle->p2_vel.x,
+          particle->p2_vel.y,
+          particle->p2_vel.z,
+          particle->p1_force.x,
+          particle->p1_force.y,
+          particle->p1_force.z,
+          particle->p2_force.x,
+          particle->p2_force.y,
+          particle->p2_force.z,
+          particle->p1_angvel.x,
+          particle->p1_angvel.y,
+          particle->p1_angvel.z,
+          particle->p2_angvel.x,
+          particle->p2_angvel.y,
+          particle->p2_angvel.z);
 
 }
 
@@ -285,7 +268,7 @@ void create_xyz_file(const int tindex, const struct Particle_Pair *particle) {
   FILE *ffile = fopen(filename, "w");
   fprintf(ffile, "2\n");
   fprintf(ffile, "Trajectory of particles\n");
-  fprintf(ffile, "C %.10lf %.10lf %.10lf %.10lf %.10lf %.10lf %.10lf %.10lf %.10lf\n",
+  fprintf(ffile, "C %.10e %.10e %.10e %.10e %.10e %.10e %.10e %.10e %.10e\n",
           particle->p1_pos.x,
           particle->p1_pos.y,
           particle->p1_pos.z,
@@ -295,8 +278,7 @@ void create_xyz_file(const int tindex, const struct Particle_Pair *particle) {
           particle->p1_force.x,
           particle->p1_force.y,
           particle->p1_force.z);
-
-  fprintf(ffile, "C %.10lf %.10lf %.10lf %.10lf %.10lf %.10lf %.10lf %.10lf %.10lf\n",
+  fprintf(ffile, "C %.10e %.10e %.10e %.10e %.10e %.10e %.10e %.10e %.10e\n",
           particle->p2_pos.x,
           particle->p2_pos.y,
           particle->p2_pos.z,
@@ -311,11 +293,20 @@ void create_xyz_file(const int tindex, const struct Particle_Pair *particle) {
 
 void simulate_particle(const struct config *conf,
                        const double radius,
-                       const double *rlist, const double *force_list,
+                       const double *force_list,
                        struct Particle_Pair *particle) {
 
   double dt = conf->dt;
-  double forcemag = 0.0;
+  const int parindex = particle->index;
+  const int saveflag = conf->saveflag;
+  const int xyzflag = conf->xyzflag;
+  const double icd_dist2 = conf->icd_dist * conf->icd_dist;
+  const double max_time = conf->max_time;
+  const double max_dist_sq = conf->force_grid_start + (conf->force_grid_length - 2) * conf->force_grid;
+  const double inv_grid_size = 1.0/conf->force_grid;
+  const double grid_start = conf->force_grid_start;
+  const double mass = conf->mass;
+
   Vector3D ang_vel1 = {0., 0., 0.};
   Vector3D acc1 = {0., 0., 0.};
   Vector3D ang_vel2 = {0., 0., 0.};
@@ -326,9 +317,9 @@ void simulate_particle(const struct config *conf,
   int tindex = 0;
 
 
-  if (conf->xyzflag) {
+  if (xyzflag) {
     char dirname[80];
-    sprintf(dirname, "./results/trajectories_%06d", particle->index);
+    sprintf(dirname, "./results/trajectories_%06d", parindex);
 
     // Create result directory to keep results
     struct stat st = {0};
@@ -337,12 +328,12 @@ void simulate_particle(const struct config *conf,
     }
   }
 
-  if (conf->saveflag) {
-    sprintf(ffname, "./results/trajectory_%06d.txt", particle->index);
+  if (saveflag) {
+    sprintf(ffname, "./results/trajectory_%06d.txt", parindex);
     ffile = fopen(ffname, "w");
     fprintf(ffile,
-            "Index\tSuccess\tTime\tDistance\t"
-            "Vel_1\tVel_2\t"
+            "Index\tSuccess\tTime\tDistance_Sq\t"
+            "Vel_Sq_1\tVel_Sq_2\tForce\t"
             "QA_1\tQX_1\tQY_1\tQZ_1\t"
             "QA_2\tQX_2\tQY_2\tQZ_2\t"
             "X_1\tY_1\tZ_1\t"
@@ -356,29 +347,24 @@ void simulate_particle(const struct config *conf,
   }
 
   particle->time = 0;
-  while (particle->time < conf->max_time && !particle->success) {
+
+  // Calculate initial torque and acceleration
+  if (fabs(particle->force) > 1E-10) {
+    dt = 1.0;
+    find_accelration(mass, radius, &(particle->p1_pos), &(particle->p1_force), &acc1);
+    find_accelration(mass, radius, &(particle->p2_pos), &(particle->p2_force), &acc2);
+  }
+
+  while (particle->time < max_time && !particle->success) {
     // Save trajectory in text file
-    if (conf->saveflag)
+    if (saveflag)
       save_particle_pair(ffile, particle);
-    if (conf->xyzflag)
+    if (xyzflag)
       create_xyz_file(tindex, particle);
 
-    // Find Force
-    forcemag = find_force(particle->distance, conf->force_grid_length-1, conf->force_grid, rlist, force_list);
-    // If force is less than 1E-10 amu.Å.fs¯² (10 neV/Å, 1E-17 N)
-    // Consider it zero
-    if (fabs(forcemag) - 1E-10 > 0) {
+    if (fabs(particle->force) > 1E-10) {
       dt = 1.0;
-      // Step 1: Find the torque on particles
-      particle->p1_force.x = forcemag * (particle->p1_pos.x - particle->p2_pos.x) / particle->distance;
-      particle->p1_force.y = forcemag * (particle->p1_pos.y - particle->p2_pos.y) / particle->distance;
-      particle->p1_force.z = forcemag * (particle->p1_pos.z - particle->p2_pos.z) / particle->distance;
-      scalar_multiply(-1, &(particle->p1_force), &(particle->p2_force));
-
-      find_accelration(conf->mass, radius, &(particle->p1_pos), &(particle->p1_force), &acc1);
-      find_accelration(conf->mass, radius, &(particle->p2_pos), &(particle->p2_force), &acc2);
-
-      // Step 2: Calculate angular velocity at timestamp Δt/2
+      // Step 1: Calculate angular velocity at timestamp Δt/2
       update_angvel(dt/2.0, &(particle->p1_angvel), &acc1, &ang_vel1);
       update_angvel(dt/2.0, &(particle->p2_angvel), &acc2, &ang_vel2);
     } else {
@@ -390,31 +376,33 @@ void simulate_particle(const struct config *conf,
       ang_vel2.z = particle->p2_angvel.z;
     }
 
-    // Step 3: Update Orientation
+    // Step 2: Update Orientation
     update_orientation(radius, dt, &(particle->p1_qua),
                        &ang_vel1, &(particle->p1_pos));
     update_orientation(radius, dt, &(particle->p2_qua),
                        &ang_vel2, &(particle->p2_pos));
 
     // Check if they met
-    particle->distance = distance_between_pair(particle);
-    if (particle->distance < conf->icd_dist) {
+    particle->distance_sq = distancesq_between_pair(particle);
+    if (particle->distance_sq < icd_dist2) {
       particle->success = 1;
       break;
     }
  
     // Check force again
-    forcemag = find_force(particle->distance, conf->force_grid_length-1, conf->force_grid, rlist, force_list);
-
-    if (fabs(forcemag) - 1E-10 > 0) {
+    if (particle->distance_sq > max_dist_sq)
+      particle->force = 0;
+    else
+      particle->force = force_list[(int)((particle->distance_sq - grid_start) * inv_grid_size)];
+    if (fabs(particle->force) > 1E-10) {
       // Step 4: Find the torque at new position
-      particle->p1_force.x = forcemag * (particle->p1_pos.x - particle->p2_pos.x) / particle->distance;
-      particle->p1_force.y = forcemag * (particle->p1_pos.y - particle->p2_pos.y) / particle->distance;
-      particle->p1_force.z = forcemag * (particle->p1_pos.z - particle->p2_pos.z) / particle->distance;
+      particle->p1_force.x = particle->force * (particle->p1_pos.x - particle->p2_pos.x) / sqrt(particle->distance_sq);
+      particle->p1_force.y = particle->force * (particle->p1_pos.y - particle->p2_pos.y) / sqrt(particle->distance_sq);
+      particle->p1_force.z = particle->force * (particle->p1_pos.z - particle->p2_pos.z) / sqrt(particle->distance_sq);
       scalar_multiply(-1, &(particle->p1_force), &(particle->p2_force));
 
-      find_accelration(conf->mass, radius, &(particle->p1_pos), &(particle->p1_force), &acc1);
-      find_accelration(conf->mass, radius, &(particle->p2_pos), &(particle->p2_force), &acc2);
+      find_accelration(mass, radius, &(particle->p1_pos), &(particle->p1_force), &acc1);
+      find_accelration(mass, radius, &(particle->p2_pos), &(particle->p2_force), &acc2);
 
       // Step 5: Calculate angular velocity at Δt
       update_angvel(dt/2.0, &ang_vel1, &acc1, &(particle->p1_angvel));
@@ -430,9 +418,9 @@ void simulate_particle(const struct config *conf,
 
     // Calculate new velocity magnitute
     cross_product(&(particle->p1_pos), &(particle->p1_angvel), &(particle->p1_vel));
-    particle->p1_velocity = norm(&(particle->p1_vel));
+    particle->p1_velocity_sq = norm_sq(&(particle->p1_vel));
     cross_product(&(particle->p2_pos), &(particle->p2_angvel), &(particle->p2_vel));
-    particle->p2_velocity = norm(&(particle->p2_vel));
+    particle->p2_velocity_sq = norm_sq(&(particle->p2_vel));
 
     particle->time += dt;
     tindex += 1;
