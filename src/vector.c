@@ -121,6 +121,11 @@ void quat_random(Quat *result) {
     result->x = y;
     result->y = s * u;
     result->z = s * v;
+    double mag = quat_norm(result);
+    result->a /= mag;
+    result->x /= mag;
+    result->y /= mag;
+    result->z /= mag;
 }
 
 // Function to add two quaternions

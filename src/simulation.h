@@ -13,6 +13,7 @@ struct config {
   int step;
   int stop;
   int helium_number;
+  long seed;
   double mass;
   double velocity;
   double dt;

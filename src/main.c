@@ -16,6 +16,7 @@ void print_configuration(const struct config *conf) {
     printf("step = %d\n", conf->step);
     printf("stop = %d\n", conf->stop);
     printf("helium_number = %d\n", conf->helium_number);
+    printf("seed = %ld\n", conf->seed);
     printf("mass = %lf\n", conf->mass);
     printf("velocity = %lf\n", conf->velocity);
     printf("dt = %lf\n", conf->dt);

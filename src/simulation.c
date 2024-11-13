@@ -42,6 +42,8 @@ int read_config(const char *filename, struct config *conf) {
         conf->stop = atoi(value);
       else if (strcmp(key, "helium_number") == 0)
         conf->helium_number = atoi(value);
+      else if (strcmp(key, "seed") == 0)
+        conf->seed = atoi(value);
       else if (strcmp(key, "mass") == 0)
         conf->mass = atof(value);
       else if (strcmp(key, "velocity") == 0)
@@ -105,8 +107,10 @@ int initialize_particle_pair(const double radius,
   const double max_dist_sq = conf->force_grid_start + (conf->force_grid_length - 2) * conf->force_grid;
 
   // Setup random number generator
-  srand(100401430);
-  // srand(time(NULL));
+  if (conf->seed)
+    srand(conf->seed);
+  else
+    srand(time(NULL));
 
   for (int i = 0; i < conf->number; ++i) {
       par = particle + i;
@@ -189,6 +193,37 @@ void update_angvel(const double timestep,
   add_vectors(oldangvel, &temp, newangvel);
 }
 
+/*
+// SPIRAL
+void update_orientation(const double radius,
+                        const double timestep,
+                        Quat *orient,
+                        const Vector3D *angvel,
+                        Vector3D *pos) {
+  Quat tempquat = {0, 0, 0, 0};
+  Quat res = {0, 0, 0, 0};
+  Vector3D temp = {0, 0, 0};
+  double mag = norm(angvel);
+  double theta = timestep/2.0 * mag;
+
+  scalar_multiply(sin(theta)/mag, angvel, &temp);
+  tempquat.a = cos(theta);
+  tempquat.x = temp.x;
+  tempquat.y = temp.y;
+  tempquat.z = temp.z;
+
+  quat_product(orient, &tempquat, &res);
+  orient->a = res.a;
+  orient->x = res.x;
+  orient->y = res.y;
+  orient->z = res.z;
+
+  quat_to_pos(orient, pos);
+  scalar_multiply(radius, pos, pos);
+}
+*/
+
+// Velocity Verlet
 void update_orientation(const double radius,
                         const double timestep,
                         Quat *orient,
@@ -384,11 +419,9 @@ void simulate_particle(const struct config *conf,
 
     // Check if they met
     particle->distance_sq = distancesq_between_pair(particle);
-    if (particle->distance_sq < icd_dist2) {
+    if (particle->distance_sq < icd_dist2)
       particle->success = 1;
-      break;
-    }
- 
+
     // Check force again
     if (particle->distance_sq > max_dist_sq)
       particle->force = 0;
@@ -416,7 +449,7 @@ void simulate_particle(const struct config *conf,
       particle->p2_angvel.z = ang_vel2.z;
     }
 
-    // Calculate new velocity magnitute
+    // Calculate new velocity
     cross_product(&(particle->p1_pos), &(particle->p1_angvel), &(particle->p1_vel));
     particle->p1_velocity_sq = norm_sq(&(particle->p1_vel));
     cross_product(&(particle->p2_pos), &(particle->p2_angvel), &(particle->p2_vel));
