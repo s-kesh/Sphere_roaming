@@ -6,6 +6,7 @@
 
 struct config {
   int print;
+  int no; // no of particles for each droplet
   int number;
   int saveflag;
   int xyzflag;
@@ -25,40 +26,36 @@ struct config {
   char force_file[50];
 };
 
-struct Particle_Pair {
-  unsigned int success;
+typedef struct {
+  unsigned int no;
   unsigned int index;
-  double time;
-  double distance_sq;
+  unsigned int *success;
+  double *time;
 
-  double p1_velocity_sq;
-  double p2_velocity_sq;
-  double force;
+  double *velocity_sq;
+  double *force_mag;
 
-  Vector3D p1_pos;
-  Vector3D p2_pos;
-  Quat p1_qua;
-  Quat p2_qua;
-  Vector3D p1_angvel;
-  Vector3D p2_angvel;
-
-  Vector3D p1_vel;
-  Vector3D p2_vel;
-
-  Vector3D p1_force;
-  Vector3D p2_force;
-};
+  Quat *orientation;
+  Vector3D *position;
+  Vector3D *velocity;
+  Vector3D *ang_velocity;
+  Vector3D *force;
+} Particles ;
 
 int read_config(const char *filename, struct config *conf);
-double distancesq_between_pair(const struct Particle_Pair *particle);
-int initialize_particle_pair(const double radius,
+void calculate_force(Particles *particle,
+                     const struct config *conf,
+                     const double *Force_list);
+int initialize_particle_pair(const int number,
+                             const double radius,
                              const struct config *conf,
                              const double *Force_list,
-                             struct Particle_Pair *particle);
+                             Particles *particle);
+void free_particles(Particles *particle);
 void simulate_particle(const struct config *conf,
                        const double radius,
                        const double *force_list,
-                       struct Particle_Pair *particle);
+                       Particles *particle);
 void find_accelration(const double mass, const double radius,
                       const Vector3D *pos, const Vector3D *force,
                       Vector3D *acc);
@@ -68,6 +65,6 @@ void update_orientation(const double radius, const double timestep,
                         Quat *orient, const Vector3D *angvel,
                         Vector3D *pos);
 
-void save_particle_pair(FILE *fpointer, const struct Particle_Pair *particle);
-void create_xyz_file(const int tindex, const struct Particle_Pair *particle);
+void save_particle_pair(FILE *fpointer, const Particles *particle);
+void create_xyz_file(const int tindex, const Particles *particle);
 #endif
