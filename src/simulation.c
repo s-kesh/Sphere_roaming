@@ -48,6 +48,8 @@ int read_config(const char *filename, struct config *conf) {
         conf->mass = atof(value);
       else if (strcmp(key, "velocity") == 0)
         conf->velocity = atof(value);
+      else if (strcmp(key, "velratio") == 0)
+        conf->velratio = atof(value);
       else if (strcmp(key, "dt") == 0)
         conf->dt = atof(value);
       else if (strcmp(key, "max_time") == 0)
@@ -86,6 +88,24 @@ double distancesq_between_pair(const struct Particle_Pair *particle) {
     return xx*xx + yy*yy + zz*zz;
 }
 
+double generate_velocity(const struct config *conf) {
+  double pi = 4 * atan(1);
+
+  // Generate 4 uniformly distributed numbers
+  double u1 = (double)rand() / RAND_MAX;
+  double u2 = (double)rand() / RAND_MAX;
+  double u3 = (double)rand() / RAND_MAX;
+  double u4 = (double)rand() / RAND_MAX;
+
+  // Box-Muller algorithim
+  double z1 = sqrt(-2.0 * log(u1)) * cos(2.0 * pi * u2);
+  double z2 = sqrt(-2.0 * log(u1)) * sin(2.0 * pi * u2);
+  double z3 = sqrt(-2.0 * log(u3)) * cos(2.0 * pi * u4);
+  // double z4 = sqrt(-2.0 * log(u3)) * sin(2.0 * pi * u4);
+
+  return sqrt(z1*z1 + z2*z2 + z3*z3) * conf->velocity;
+}
+
 int initialize_particle_pair(const double radius,
                              const struct config *conf,
                              const double *force_list,
@@ -101,8 +121,7 @@ int initialize_particle_pair(const double radius,
   Vector3D pos2 = {0, 0, 0};
   Vector3D res = {0, 0, 0};
 
-  const double ang_vel = (1E-5 * conf->velocity) / radius; // Unit fs¯¹
-  const double velocity_sq = conf->velocity * conf->velocity * 1E-10; // Convert m/s to Å/fs
+  // const double velocity_sq = conf->velocity * conf->velocity * 1E-10; // Convert m/s to Å/fs
   const double icd_dist2 = conf->icd_dist*conf->icd_dist;
   const double max_dist_sq = conf->force_grid_start + (conf->force_grid_length - 2) * conf->force_grid;
 
@@ -138,15 +157,26 @@ int initialize_particle_pair(const double radius,
       par->p1_pos = pos1;
       par->p2_pos = pos2;
 
+      // Generate two random speed
+      double v1 = generate_velocity(conf) * 1E-5; // Convert m/s to Å/fs
+      double v2 = generate_velocity(conf) * 1E-5; // Convert m/s to Å/fs
+      par->p1_velocity_sq = v1*v1;
+      par->p2_velocity_sq = v2*v2;
+      double ang_vel1 = v1 / radius; // Unit fs¯¹
+      double ang_vel2 = v2 / radius; // Unit fs¯¹
+
       // Generate random angular velocity
-      par->p1_velocity_sq = velocity_sq;
-      par->p2_velocity_sq = velocity_sq;
+      // double ratio = conf->velratio;
+      // par->p1_velocity_sq = (2.0 / (ratio*ratio + 1)) * velocity_sq;
+      // par->p2_velocity_sq = (2.0 * ratio * ratio / (ratio*ratio + 1)) * velocity_sq;
+      // double ang_vel1 = sqrt(par->p1_velocity_sq) / radius; // Unit fs¯¹
+      // double ang_vel2 = sqrt(par->p2_velocity_sq) / radius; // Unit fs¯¹
 
       // Need to find the perpenducular vector to position
       create_perpend_vector(&(par->p1_pos), &res);
-      scalar_multiply(ang_vel/norm(&res), &res, &(par->p1_angvel));
+      scalar_multiply(ang_vel1/norm(&res), &res, &(par->p1_angvel));
       create_perpend_vector(&(par->p2_pos), &res);
-      scalar_multiply(ang_vel/norm(&res), &res, &(par->p2_angvel));
+      scalar_multiply(ang_vel2/norm(&res), &res, &(par->p2_angvel));
 
       // Calculate velocity
       cross_product(&(par->p1_pos), &(par->p1_angvel), &(par->p1_vel));
@@ -364,7 +394,7 @@ void simulate_particle(const struct config *conf,
   }
 
   if (saveflag) {
-    sprintf(ffname, "./results/trajectory_%06d.txt", parindex);
+    sprintf(ffname, "./results/trajectory_%06d.%02d", parindex, (int)(conf->velratio*10));
     ffile = fopen(ffname, "w");
     fprintf(ffile,
             "Index\tSuccess\tTime\tDistance_Sq\t"
