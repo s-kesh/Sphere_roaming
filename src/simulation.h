@@ -17,7 +17,6 @@ struct config {
   long seed;
   double mass;
   double velocity;
-  double velratio;
   double dt;
   double max_time;
   double icd_dist;
@@ -41,24 +40,22 @@ typedef struct {
   Vector3D *velocity;
   Vector3D *ang_velocity;
   Vector3D *force;
-} Particles ;
+} Particle ;
 
 int read_config(const char *filename, struct config *conf);
-double distancesq_between_pair(const struct Particle_Pair *particle);
 double generate_velocity(const struct config *conf);
-void calculate_force(Particles *particle,
+void calculate_force(Particle *particle,
                      const struct config *conf,
                      const double *Force_list);
-int initialize_particle_pair(const int number,
-                             const double radius,
+int initialize_particle_pair(const double radius,
                              const struct config *conf,
                              const double *Force_list,
-                             Particles *particle);
-void free_particles(Particles *particle);
+                             Particle *particle);
+void free_particles(Particle *particle);
 void simulate_particle(const struct config *conf,
                        const double radius,
                        const double *force_list,
-                       Particles *particle);
+                       Particle *particle);
 void find_accelration(const double mass, const double radius,
                       const Vector3D *pos, const Vector3D *force,
                       Vector3D *acc);
@@ -68,6 +65,6 @@ void update_orientation(const double radius, const double timestep,
                         Quat *orient, const Vector3D *angvel,
                         Vector3D *pos);
 
-void save_particle_pair(FILE *fpointer, const Particles *particle);
-void create_xyz_file(const int tindex, const Particles *particle);
+void save_particle_pair(FILE *fpointer, const Particle *particle);
+void create_xyz_file(const int tindex, const Particle *particle);
 #endif

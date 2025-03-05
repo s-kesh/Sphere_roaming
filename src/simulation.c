@@ -54,8 +54,6 @@ int read_config(const char *filename, struct config *conf) {
         conf->mass = atof(value);
       else if (strcmp(key, "velocity") == 0)
         conf->velocity = atof(value);
-      else if (strcmp(key, "velratio") == 0)
-        conf->velratio = atof(value);
       else if (strcmp(key, "dt") == 0)
         conf->dt = atof(value);
       else if (strcmp(key, "max_time") == 0)
@@ -76,7 +74,7 @@ int read_config(const char *filename, struct config *conf) {
   return 1;
 }
 
-void calculate_force(Particles *par,
+void calculate_force(Particle *par,
                      const struct config *conf,
                      const double *Force_list) {
 
@@ -153,15 +151,13 @@ double generate_velocity(const struct config *conf) {
   return sqrt(z1*z1 + z2*z2 + z3*z3) * conf->velocity;
 }
 
-int initialize_particle_pair(const int number,
-                             const double radius,
+int initialize_particle_pair(const double radius,
                              const struct config *conf,
                              const double *Force_list,
-                             Particles *particle) {
-  Vector3D res = {0, 0, 0};
+                             Particle *particle) {
 
-  const double icd_dist2 = conf->icd_dist*conf->icd_dist;
-  const double max_dist_sq = conf->force_grid_start + (conf->force_grid_length - 2) * conf->force_grid;
+  // const double icd_dist2 = conf->icd_dist*conf->icd_dist;
+  // const double max_dist_sq = conf->force_grid_start + (conf->force_grid_length - 2) * conf->force_grid;
 
   // Setup random number generator
   if (conf->seed)
@@ -169,25 +165,25 @@ int initialize_particle_pair(const int number,
   else
     srand(time(NULL));
 
-  Particles *par = NULL;
+  Particle *par = NULL;
   for (int i = 0; i < conf->number; ++i) {
       par = particle + i;
 
       // Initialise particles
-      par->no = number;
+      par->no = conf->no;
       par->index = i;
-      par->success = (unsigned int *)malloc(number * sizeof(unsigned int));
-      par->time = (double *)malloc(number * sizeof(double));
-      par->velocity_sq = (double *)malloc(number * sizeof(double));
-      par->force_mag = (double *)malloc(number * sizeof(double));
-      par->orientation = (Quat *)malloc(number * sizeof(Quat));
-      par->position = (Vector3D *)malloc(number * sizeof(Vector3D));
-      par->velocity = (Vector3D *)malloc(number * sizeof(Vector3D));
-      par->ang_velocity = (Vector3D *)malloc(number * sizeof(Vector3D));
-      par->force = (Vector3D *)malloc(number * sizeof(Vector3D));
+      par->success = (unsigned int *)malloc(conf->no * sizeof(unsigned int));
+      par->time = (double *)malloc(conf->no * sizeof(double));
+      par->velocity_sq = (double *)malloc(conf->no * sizeof(double));
+      par->force_mag = (double *)malloc(conf->no * sizeof(double));
+      par->orientation = (Quat *)malloc(conf->no * sizeof(Quat));
+      par->position = (Vector3D *)malloc(conf->no * sizeof(Vector3D));
+      par->velocity = (Vector3D *)malloc(conf->no * sizeof(Vector3D));
+      par->ang_velocity = (Vector3D *)malloc(conf->no * sizeof(Vector3D));
+      par->force = (Vector3D *)malloc(conf->no * sizeof(Vector3D));
     
       // Generate single particles
-      for (int j = 0; j < number; ++j) {
+      for (int j = 0; j < conf->no; ++j) {
         par->success[j] = 0;
 
         // Generate position
@@ -197,7 +193,9 @@ int initialize_particle_pair(const int number,
 
         // Generate velocity
         double vel = generate_velocity(conf) * 1E-5; // Convert m/s to Å/fs
+        double ang_vel = vel / radius;
         par->velocity_sq[j] = vel*vel;
+        Vector3D res = {0, 0, 0};
         create_perpend_vector(par->position + j, &res);
         scalar_multiply(ang_vel/norm(&res), &res, par->ang_velocity + j);
         cross_product(par->position + j, par->ang_velocity + j, par->velocity + j);
@@ -215,7 +213,7 @@ int initialize_particle_pair(const int number,
   return 0;
 }
 
-void free_particles(Particles *particle) {
+void free_particles(Particle *particle) {
   free(particle->success);
   free(particle->time);
   free(particle->velocity_sq);
@@ -295,7 +293,7 @@ void update_orientation(const double radius,
   scalar_multiply(radius, pos, pos);
 }
 
-void save_particle_pair(FILE *fpointer, const Particles *particle) {
+void save_particle_pair(FILE *fpointer, const Particle *particle) {
   for (unsigned int i = 0; i < particle->no; ++i) {
     fprintf(fpointer,
             "%d\t%d\t%d\t%.10e\t"
@@ -317,7 +315,7 @@ void save_particle_pair(FILE *fpointer, const Particles *particle) {
   }
 }
 
-void create_xyz_file(const int tindex, const Particles *particle) {
+void create_xyz_file(const int tindex, const Particle *particle) {
   int index = particle->index;
 
   char filename[80];
@@ -343,7 +341,7 @@ void create_xyz_file(const int tindex, const Particles *particle) {
 void simulate_particle(const struct config *conf,
                        const double radius,
                        const double *force_list,
-                       Particles *particle) {
+                       Particle *particle) {
 
   double dt = conf->dt;
   hid_t file_id;
@@ -359,7 +357,7 @@ void simulate_particle(const struct config *conf,
   // FILE *ffile = NULL;
   int tindex = 0;
 
-  printf("Simulating particle %d\n", parindex);
+  printf("Simulating particle pairs %d\n", parindex);
 
 
   if (xyzflag) {
@@ -382,7 +380,7 @@ void simulate_particle(const struct config *conf,
   double time = 0;
 
   while (sucess || time < conf->max_time) {
-    // if (tindex % 100) printf("%d\t", tindex);
+    // if (tindex % 10000) printf("%d\t", tindex);
     if (saveflag)
       save_timestep_to_hdf5(file_id, tindex, particle);
     if (xyzflag)

@@ -1,3 +1,9 @@
+/*
+Simulation entry point file.
+For simplicity first consider only one MC trajectory.
+conf->number = 1
+*/
+
 #include <stdio.h>
 #include <math.h>
 #include <stdlib.h>
@@ -20,7 +26,6 @@ void print_configuration(const struct config *conf) {
     printf("seed = %ld\n", conf->seed);
     printf("mass = %lf\n", conf->mass);
     printf("velocity = %lf\n", conf->velocity);
-    printf("velratio = %lf\n", conf->velratio);
     printf("dt = %lf\n", conf->dt);
     printf("max_time = %lf\n", conf->max_time);
     printf("icd_dist = %lf\n", conf->icd_dist);
@@ -37,15 +42,17 @@ void simulate_for_number(const int helium_number, const struct config *conf,
   double radius = 2.22 * pow((double)helium_number, 1.0/3.0);
 
   // Array to hold particles
-  Particles *particles = (Particles *)malloc(conf->number * sizeof(Particles));
+  // Number of particles = number_of_simulations * no_of_particles_in_one_simulation
+  // For simplicity conf->number = 1
+  Particle *particles = (Particle *)malloc(conf->number * conf->no * sizeof(Particle));
 
   // Initialize random particleSimulation
-  initialize_particle_pair(conf->no, radius, conf, Flist, particles);
+  initialize_particle_pair(radius, conf, Flist, particles);
 
   // Write particle properties in a file
   char ffname[80];
   FILE *ffile;
-  sprintf(ffname, "./results/particlefile_%d.%02d", helium_number, (int)(conf->velratio*10));
+  sprintf(ffname, "./results/particlefile_%d", helium_number);
   ffile = fopen(ffname, "w");
   fprintf(ffile,
           "Index\tNumber\tSuccess\tTime\t"
@@ -64,7 +71,7 @@ void simulate_for_number(const int helium_number, const struct config *conf,
     simulate_particle(conf, radius, Flist, particles + i);
 
   // Write particle properties in a file
-  sprintf(ffname, "./results/particlefile_after_%d.%02d", helium_number, (int)(conf->velratio*10));
+  sprintf(ffname, "./results/particlefile_after_%d", helium_number);
   ffile = fopen(ffname, "w");
   fprintf(ffile,
           "Index\tNumber\tSuccess\tTime\t"

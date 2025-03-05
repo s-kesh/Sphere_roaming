@@ -39,7 +39,7 @@ void close_file(const hid_t file_id) {
 }
 
 void save_timestep_to_hdf5(const hid_t file_id, const unsigned int step,
-                          const Particles *particles) {
+                          const Particle *particles) {
     // Create a group
     char group_name[32];
     snprintf(group_name, sizeof(group_name), "/Step_%u", step);
