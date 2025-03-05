@@ -16,6 +16,7 @@ struct config {
   long seed;
   double mass;
   double velocity;
+  double velratio;
   double dt;
   double max_time;
   double icd_dist;
@@ -51,6 +52,7 @@ struct Particle_Pair {
 
 int read_config(const char *filename, struct config *conf);
 double distancesq_between_pair(const struct Particle_Pair *particle);
+double generate_velocity(const struct config *conf);
 int initialize_particle_pair(const double radius,
                              const struct config *conf,
                              const double *Force_list,
