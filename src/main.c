@@ -9,6 +9,7 @@
 
 void print_configuration(const struct config *conf) {
     printf("Configuration File Loaded\n");
+    printf("no = %d\n", conf->no);
     printf("number = %d\n", conf->number);
     printf("saveflag = %d\n", conf->saveflag);
     printf("xyzflag = %d\n", conf->xyzflag);
@@ -35,11 +36,11 @@ void simulate_for_number(const int helium_number, const struct config *conf,
   // Calculate radius of droplet
   double radius = 2.22 * pow((double)helium_number, 1.0/3.0);
 
-  // Array to hold twin particles
-  struct Particle_Pair *particles = (struct Particle_Pair *)malloc(conf->number * sizeof(struct Particle_Pair));
+  // Array to hold particles
+  Particles *particles = (Particles *)malloc(conf->number * sizeof(Particles));
 
   // Initialize random particleSimulation
-  initialize_particle_pair(radius, conf, Flist, particles);
+  initialize_particle_pair(conf->no, radius, conf, Flist, particles);
 
   // Write particle properties in a file
   char ffname[80];
@@ -47,18 +48,10 @@ void simulate_for_number(const int helium_number, const struct config *conf,
   sprintf(ffname, "./results/particlefile_%d.%02d", helium_number, (int)(conf->velratio*10));
   ffile = fopen(ffname, "w");
   fprintf(ffile,
-          "Index\tSuccess\tTime\tDistance_Sq\t"
-          "Vel_Sq_1\tVel_Sq_2\tForce\t"
-          "QA_1\tQX_1\tQY_1\tQZ_1\t"
-          "QA_2\tQX_2\tQY_2\tQZ_2\t"
-          "X_1\tY_1\tZ_1\t"
-          "X_2\tY_2\tZ_2\t"
-          "VX_1\tVY_1\tVZ_1\t"
-          "VX_2\tVY_2\tVZ_2\t"
-          "FX_1\tFY_1\tFZ_1\t"
-          "FX_2\tFY_2\tFZ_2\t"
-          "WX_1\tWY_1\tWZ_1\t"
-          "WX_2\tWY_2\tWZ_2\n");
+          "Index\tNumber\tSuccess\tTime\t"
+          "X\tY\tZ\t"
+          "VX\tVY\tVZ\t"
+          "FX\tFY\tFZ\n");
   for (int i = 0; i < conf->number; ++i) {
     save_particle_pair(ffile, particles + i);
   }
@@ -74,21 +67,16 @@ void simulate_for_number(const int helium_number, const struct config *conf,
   sprintf(ffname, "./results/particlefile_after_%d.%02d", helium_number, (int)(conf->velratio*10));
   ffile = fopen(ffname, "w");
   fprintf(ffile,
-          "Index\tSuccess\tTime\tDistance_Sq\t"
-          "Vel_Sq_1\tVel_Sq_2\tForce\t"
-          "QA_1\tQX_1\tQY_1\tQZ_1\t"
-          "QA_2\tQX_2\tQY_2\tQZ_2\t"
-          "X_1\tY_1\tZ_1\t"
-          "X_2\tY_2\tZ_2\t"
-          "VX_1\tVY_1\tVZ_1\t"
-          "VX_2\tVY_2\tVZ_2\t"
-          "FX_1\tFY_1\tFZ_1\t"
-          "FX_2\tFY_2\tFZ_2\t"
-          "WX_1\tWY_1\tWZ_1\t"
-          "WX_2\tWY_2\tWZ_2\n");
-  for (int i = 0; i < conf->number; ++i) {
+          "Index\tNumber\tSuccess\tTime\t"
+          "X\tY\tZ\t"
+          "VX\tVY\tVZ\t"
+          "FX\tFY\tFZ\n");
+  for (int i = 0; i < conf->number; ++i)
     save_particle_pair(ffile, particles + i);
-  }
+
+  for (int i = 0; i < conf->number; ++i)
+    free_particles(particles + i);
+
   fclose(ffile);
   free(particles);
 

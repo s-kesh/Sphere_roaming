@@ -4,6 +4,7 @@ project('HeRoam', 'c')
 srcs = files(
      'src/main.c',
      'src/vector.c',
+     'src/h5file.c',
      'src/simulation.c'
 )
 
@@ -32,17 +33,19 @@ endif
 
 # Dependencies
 omp_dep = dependency('openmp', required: false)
+h5_dep = dependency('hdf5', language: 'c')
 
 # Build
 if omp_dep.found()
    exe = executable('HeRoam',
             srcs,
-            dependencies: omp_dep,
+            dependencies: [omp_dep, h5_dep],
             c_args: cflags,
             link_args: ldflags)
 else
     exe = executable('HeRoam',
             srcs,
+            dependencies: h5_dep,
             c_args: cflags,
             link_args: ldflags)
 endif
