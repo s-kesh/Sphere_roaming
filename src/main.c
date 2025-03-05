@@ -20,6 +20,7 @@ void print_configuration(const struct config *conf) {
     printf("seed = %ld\n", conf->seed);
     printf("mass = %lf\n", conf->mass);
     printf("velocity = %lf\n", conf->velocity);
+    printf("velratio = %lf\n", conf->velratio);
     printf("dt = %lf\n", conf->dt);
     printf("max_time = %lf\n", conf->max_time);
     printf("icd_dist = %lf\n", conf->icd_dist);
@@ -44,7 +45,7 @@ void simulate_for_number(const int helium_number, const struct config *conf,
   // Write particle properties in a file
   char ffname[80];
   FILE *ffile;
-  sprintf(ffname, "./results/particlefile_%d.txt", helium_number);
+  sprintf(ffname, "./results/particlefile_%d.%02d", helium_number, (int)(conf->velratio*10));
   ffile = fopen(ffname, "w");
   fprintf(ffile,
           "Index\tNumber\tSuccess\tTime\t"
@@ -63,7 +64,7 @@ void simulate_for_number(const int helium_number, const struct config *conf,
     simulate_particle(conf, radius, Flist, particles + i);
 
   // Write particle properties in a file
-  sprintf(ffname, "./results/particlefile_after_%d.txt", helium_number);
+  sprintf(ffname, "./results/particlefile_after_%d.%02d", helium_number, (int)(conf->velratio*10));
   ffile = fopen(ffname, "w");
   fprintf(ffile,
           "Index\tNumber\tSuccess\tTime\t"

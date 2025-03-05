@@ -54,6 +54,8 @@ int read_config(const char *filename, struct config *conf) {
         conf->mass = atof(value);
       else if (strcmp(key, "velocity") == 0)
         conf->velocity = atof(value);
+      else if (strcmp(key, "velratio") == 0)
+        conf->velratio = atof(value);
       else if (strcmp(key, "dt") == 0)
         conf->dt = atof(value);
       else if (strcmp(key, "max_time") == 0)
@@ -133,6 +135,24 @@ void calculate_force(Particles *par,
   free(dist_sq);
 }
 
+double generate_velocity(const struct config *conf) {
+  double pi = 4 * atan(1);
+
+  // Generate 4 uniformly distributed numbers
+  double u1 = (double)rand() / RAND_MAX;
+  double u2 = (double)rand() / RAND_MAX;
+  double u3 = (double)rand() / RAND_MAX;
+  double u4 = (double)rand() / RAND_MAX;
+
+  // Box-Muller algorithim
+  double z1 = sqrt(-2.0 * log(u1)) * cos(2.0 * pi * u2);
+  double z2 = sqrt(-2.0 * log(u1)) * sin(2.0 * pi * u2);
+  double z3 = sqrt(-2.0 * log(u3)) * cos(2.0 * pi * u4);
+  // double z4 = sqrt(-2.0 * log(u3)) * sin(2.0 * pi * u4);
+
+  return sqrt(z1*z1 + z2*z2 + z3*z3) * conf->velocity;
+}
+
 int initialize_particle_pair(const int number,
                              const double radius,
                              const struct config *conf,
@@ -140,8 +160,8 @@ int initialize_particle_pair(const int number,
                              Particles *particle) {
   Vector3D res = {0, 0, 0};
 
-  const double ang_vel = (1E-5 * conf->velocity) / radius; // Unit fs¯¹
-  const double velocity_sq = conf->velocity * conf->velocity * 1E-10; // Convert m/s to Å/fs
+  const double icd_dist2 = conf->icd_dist*conf->icd_dist;
+  const double max_dist_sq = conf->force_grid_start + (conf->force_grid_length - 2) * conf->force_grid;
 
   // Setup random number generator
   if (conf->seed)
@@ -165,7 +185,7 @@ int initialize_particle_pair(const int number,
       par->velocity = (Vector3D *)malloc(number * sizeof(Vector3D));
       par->ang_velocity = (Vector3D *)malloc(number * sizeof(Vector3D));
       par->force = (Vector3D *)malloc(number * sizeof(Vector3D));
-
+    
       // Generate single particles
       for (int j = 0; j < number; ++j) {
         par->success[j] = 0;
@@ -176,11 +196,14 @@ int initialize_particle_pair(const int number,
         scalar_multiply(radius, par->position + j, par->position + j);
 
         // Generate velocity
-        par->velocity_sq[j] = velocity_sq;
+        double vel = generate_velocity(conf) * 1E-5; // Convert m/s to Å/fs
+        par->velocity_sq[j] = vel*vel;
         create_perpend_vector(par->position + j, &res);
         scalar_multiply(ang_vel/norm(&res), &res, par->ang_velocity + j);
         cross_product(par->position + j, par->ang_velocity + j, par->velocity + j);
-
+        
+        // Initialize the force with zero magnitute
+        // Need to calculate later on
         par->force[j].x = 0;
         par->force[j].y = 0;
         par->force[j].z = 0;
