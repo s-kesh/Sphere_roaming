@@ -1,7 +1,7 @@
 /*
 Simulation entry point file.
-For simplicity first consider only one MC trajectory.
-conf->number = 1
+This file reads the configuration file and the force file and then simulates the particles using the velocity verlet algorithm.
+The results are saved in the results directory.
 */
 
 #include <stdio.h>
@@ -13,12 +13,15 @@ conf->number = 1
 #include <sys/types.h>
 #include <sys/stat.h>
 
+/*
+Prints the configuration read from the configuration file.
+@param conf: Configuration structure containing the configuration read from the file.
+*/
 void print_configuration(const struct config *conf) {
     printf("Configuration File Loaded\n");
     printf("no = %d\n", conf->no);
     printf("number = %d\n", conf->number);
     printf("saveflag = %d\n", conf->saveflag);
-    printf("xyzflag = %d\n", conf->xyzflag);
     printf("start = %d\n", conf->start);
     printf("step = %d\n", conf->step);
     printf("stop = %d\n", conf->stop);
@@ -35,7 +38,12 @@ void print_configuration(const struct config *conf) {
     printf("force_file = %s\n", conf->force_file);
 }
 
-
+/*
+Simulates the particles for a given helium number.
+@param helium_number: Number of helium atoms in the droplet.
+@param conf: Configuration structure containing the configuration read from the file.
+@param Flist: Array containing the force values for different distances.
+*/
 void simulate_for_number(const int helium_number, const struct config *conf,
                          const double *Flist) {
   // Calculate radius of droplet
@@ -44,10 +52,10 @@ void simulate_for_number(const int helium_number, const struct config *conf,
   // Array to hold particles
   // Number of particles = number_of_simulations * no_of_particles_in_one_simulation
   // For simplicity conf->number = 1
-  Particle *particles = (Particle *)malloc(conf->number * conf->no * sizeof(Particle));
+  Particles *particles = (Particles *)malloc(conf->number * conf->no * sizeof(Particles));
 
   // Initialize random particleSimulation
-  initialize_particle_pair(radius, conf, Flist, particles);
+  initialize_particles(radius, conf, Flist, particles);
 
   // Write particle properties in a file
   char ffname[80];
@@ -60,7 +68,7 @@ void simulate_for_number(const int helium_number, const struct config *conf,
           "VX\tVY\tVZ\t"
           "FX\tFY\tFZ\n");
   for (int i = 0; i < conf->number; ++i) {
-    save_particle_pair(ffile, particles + i);
+    save_particles(ffile, particles + i);
   }
   fclose(ffile);
 
@@ -68,7 +76,7 @@ void simulate_for_number(const int helium_number, const struct config *conf,
 
   #pragma omp parallel for
   for (int i = 0; i < conf->number; ++i)
-    simulate_particle(conf, radius, Flist, particles + i);
+    simulate_particles(conf, radius, Flist, particles + i);
 
   // Write particle properties in a file
   sprintf(ffname, "./results/particlefile_after_%d", helium_number);
@@ -79,7 +87,7 @@ void simulate_for_number(const int helium_number, const struct config *conf,
           "VX\tVY\tVZ\t"
           "FX\tFY\tFZ\n");
   for (int i = 0; i < conf->number; ++i)
-    save_particle_pair(ffile, particles + i);
+    save_particles(ffile, particles + i);
 
   for (int i = 0; i < conf->number; ++i)
     free_particles(particles + i);
@@ -89,6 +97,9 @@ void simulate_for_number(const int helium_number, const struct config *conf,
 
 }
 
+/*
+Main function to read the configuration file and the force file and simulate the particles.
+*/
 int main(int argc, char *argv[]) {
 
   if (argc < 2) {
@@ -96,6 +107,7 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
+  // Read configuration file
   struct config con;
   int success = read_config(argv[1], &con);
 
@@ -108,13 +120,14 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
+  // Open force file
   FILE *fitfile = fopen(con.force_file, "r");
   if (fitfile == NULL) {
       perror("Error opening file");
       return 1;
   }
 
-  // Read the potential file and store the values into arrays
+  // Read the force file and store the values into arrays
   double* Flist = (double *)malloc(con.force_grid_length * sizeof(double)); // Singlet_Single array
   double rF;
   double yst; // Singlet_Triplet array
@@ -132,7 +145,7 @@ int main(int argc, char *argv[]) {
     mkdir("./results", 0700);
   }
 
-  // Save forcelist
+  // Save forcelist to check if force file is read correctly
   char fffname[80] = "./results/forcelist.txt";
   FILE *fffile = fopen(fffname, "w");
   fprintf(fffile, "Distance_Squared\tForce\n");
@@ -140,6 +153,9 @@ int main(int argc, char *argv[]) {
     fprintf(fffile, "%lf\t%.10e\n", con.force_grid_start + con.force_grid*i, Flist[i]);
   }
 
+  // Simulate for the given helium number
+  // If start, stop and step are given, simulate for all helium numbers in the range
+  // Else simulate for the given helium number
   int helium_number = con.helium_number;
   if (con.start)
     for (helium_number = con.start; helium_number < con.stop;
@@ -148,6 +164,7 @@ int main(int argc, char *argv[]) {
   else
     simulate_for_number(helium_number, &con, Flist);
 
+  // Free memory
   free(Flist);
   return 0;
 }

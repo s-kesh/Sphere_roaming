@@ -26,7 +26,7 @@ int read_config(const char *filename, struct config *conf) {
     continue;
     }
 
-    // Parse key and value
+    // Parse key-value pairs
     char key[50];
     char value[50];
     if (sscanf(line, "%49s = %49s", key, value) == 2) {
@@ -38,8 +38,6 @@ int read_config(const char *filename, struct config *conf) {
         conf->number = atoi(value);
       else if (strcmp(key, "saveflag") == 0)
         conf->saveflag = atoi(value);
-      else if (strcmp(key, "xyzflag") == 0)
-        conf->xyzflag = atoi(value);
       else if (strcmp(key, "start") == 0)
         conf->start = atoi(value);
       else if (strcmp(key, "step") == 0)
@@ -74,7 +72,7 @@ int read_config(const char *filename, struct config *conf) {
   return 1;
 }
 
-void calculate_force(Particle *par,
+void calculate_force(Particles *pars,
                      const struct config *conf,
                      const double *Force_list) {
 
@@ -82,54 +80,70 @@ void calculate_force(Particle *par,
   const double force_start = conf->force_grid_start;
   const double icd_dist2 = conf->icd_dist*conf->icd_dist;
   const double max_dist_sq = conf->force_grid_start + (conf->force_grid_length - 2) * conf->force_grid;
+  int num_traj = conf->number;
 
-  unsigned int num = par->no;
-  double *dist_sq = (double *)malloc((num * (num-1) / 2) * sizeof(double));
-  for (unsigned int j = 0; j < par->no; ++j) {
-    for (unsigned int k = j + 1; k < par->no; ++k) {
+  unsigned int num = pars->no;
+  double *dist_sq = (double *)malloc((num * (num - 1) / 2) * sizeof(double));
+ 
+  // Initialize forces on each particle to zero
+  for (unsigned int j = 0; j < pars->no; ++j) {
+    Particle *particle_j = pars->particle + j;
+    particle_j->force.x = 0.0;
+    particle_j->force.y = 0.0;
+    particle_j->force.z = 0.0;
+    particle_j->force_mag = 0.0;
+  }
+
+  for (unsigned int j = 0; j < pars->no; ++j) {
+    // Take a pointer to particle j
+    Particle *particle_j = pars->particle + j;
+    if (particle_j->success) continue;
+
+    // If pair of j,k is close to each other
+    // Set success flag to 1
+    for (unsigned int k = j + 1; k < pars->no; ++k) {
+      Particle *particle_k = pars->particle + k;
+      if (particle_k->success) continue;
       unsigned int index = j*num + k - (j + 1)*(j + 2)/2;
-      double d = distance_sq(par->position + j, par->position + k);
-      *(dist_sq + index) = d;
-      if(d < icd_dist2) {
-        par->success[j] = 1;
-        par->success[k] = 1;
+      dist_sq[index] = distance_sq(&(particle_j->position), &(particle_k->position));
+      if (dist_sq[index] < icd_dist2) {
+        particle_j->success = 1;
+        particle_k->success = 1;
       }
-      par->force[j].x = 0;
-      par->force[j].y = 0;
-      par->force[j].z = 0;
-
-      par->force[k].x = 0;
-      par->force[k].y = 0;
-      par->force[k].z = 0;
     }
   }
 
-  for (unsigned int j = 0; j < par->no; ++j) {
-    if (par->success[j]) continue;
+  // Calculate forces
+  for (unsigned int j = 0; j < pars->no; ++j) {
+    Particle *particle_j = pars->particle + j;
+    if (particle_j->success) continue;
     Vector3D f = {0, 0, 0};
-    for (unsigned int k = j + 1; k < par->no; ++k) {
-      if (par->success[k]) continue;
-      // Pair j,k
+
+    for (unsigned int k = j + 1; k < pars->no; ++k) {
+      Particle *particle_k = pars->particle + k;
+      if (particle_k->success) continue;
       unsigned int index = j*num + k - (j + 1)*(j + 2)/2;
-      double d = *(dist_sq + index);
+      double d = dist_sq[index];
+
+
       if (d < max_dist_sq) {
         double scale = Force_list[(int)((d - force_start) * inv_grid_size)] / sqrt(d);
-        f.x = scale * (par->position[j].x - par->position[k].x);
-        f.y = scale * (par->position[j].y - par->position[k].y);
-        f.z = scale * (par->position[j].z - par->position[k].z);
+        f.x = scale * (particle_j->position.x - particle_k->position.x);
+        f.y = scale * (particle_j->position.y - particle_k->position.y);
+        f.z = scale * (particle_j->position.z - particle_k->position.z);
 
-        par->force[j].x += f.x;
-        par->force[j].y += f.y;
-        par->force[j].z += f.z;
+        particle_j->force.x += f.x;
+        particle_j->force.y += f.y;
+        particle_j->force.z += f.z;
 
-
-        par->force[k].x -= f.x;
-        par->force[k].y -= f.y;
-        par->force[k].z -= f.z;
+        particle_k->force.x -= f.x;
+        particle_k->force.y -= f.y;
+        particle_k->force.z -= f.z;
       }
     }
-    par->force_mag[j] = norm(par->force + j);
+    particle_j->force_mag = norm(&(particle_j->force));
   }
+
   free(dist_sq);
 }
 
@@ -143,6 +157,7 @@ double generate_velocity(const struct config *conf) {
   double u4 = (double)rand() / RAND_MAX;
 
   // Box-Muller algorithim
+  // Generate 3 normally distributed numbers
   double z1 = sqrt(-2.0 * log(u1)) * cos(2.0 * pi * u2);
   double z2 = sqrt(-2.0 * log(u1)) * sin(2.0 * pi * u2);
   double z3 = sqrt(-2.0 * log(u3)) * cos(2.0 * pi * u4);
@@ -151,13 +166,10 @@ double generate_velocity(const struct config *conf) {
   return sqrt(z1*z1 + z2*z2 + z3*z3) * conf->velocity;
 }
 
-int initialize_particle_pair(const double radius,
+int initialize_particles(const double radius,
                              const struct config *conf,
                              const double *Force_list,
-                             Particle *particle) {
-
-  // const double icd_dist2 = conf->icd_dist*conf->icd_dist;
-  // const double max_dist_sq = conf->force_grid_start + (conf->force_grid_length - 2) * conf->force_grid;
+                             Particles *particles) {
 
   // Setup random number generator
   if (conf->seed)
@@ -165,64 +177,44 @@ int initialize_particle_pair(const double radius,
   else
     srand(time(NULL));
 
-  Particle *par = NULL;
+  Particles *pars = NULL;
   for (int i = 0; i < conf->number; ++i) {
-      par = particle + i;
+      pars = particles + i;
 
-      // Initialise particles
-      par->no = conf->no;
-      par->index = i;
-      par->success = (unsigned int *)malloc(conf->no * sizeof(unsigned int));
-      par->time = (double *)malloc(conf->no * sizeof(double));
-      par->velocity_sq = (double *)malloc(conf->no * sizeof(double));
-      par->force_mag = (double *)malloc(conf->no * sizeof(double));
-      par->orientation = (Quat *)malloc(conf->no * sizeof(Quat));
-      par->position = (Vector3D *)malloc(conf->no * sizeof(Vector3D));
-      par->velocity = (Vector3D *)malloc(conf->no * sizeof(Vector3D));
-      par->ang_velocity = (Vector3D *)malloc(conf->no * sizeof(Vector3D));
-      par->force = (Vector3D *)malloc(conf->no * sizeof(Vector3D));
-    
-      // Generate single particles
+      pars->no = conf->no;
+      pars->index = i;
+      // Initializing indivisual particles
+      pars->particle = (Particle *)malloc(conf->no * sizeof(Particle));
       for (int j = 0; j < conf->no; ++j) {
-        par->success[j] = 0;
+        Particle *par = pars->particle + j;
+        par->index = j;
+        par->success = 0;
 
-        // Generate position
-        quat_random(par->orientation + j);
-        quat_to_pos(par->orientation + j, par->position + j);
-        scalar_multiply(radius, par->position + j, par->position + j);
+        // Generate Position
+        quat_random(&(par->orientation));
+
+        quat_to_pos(&(par->orientation), &(par->position));
+        scalar_multiply(radius, &(par->position), &(par->position));
 
         // Generate velocity
         double vel = generate_velocity(conf) * 1E-5; // Convert m/s to Å/fs
-        double ang_vel = vel / radius;
-        par->velocity_sq[j] = vel*vel;
+        double ang_vel = vel / radius; // Unit fs¯¹
+        par->velocity_sq = vel*vel;
         Vector3D res = {0, 0, 0};
-        create_perpend_vector(par->position + j, &res);
-        scalar_multiply(ang_vel/norm(&res), &res, par->ang_velocity + j);
-        cross_product(par->position + j, par->ang_velocity + j, par->velocity + j);
-        
-        // Initialize the force with zero magnitute
-        // Need to calculate later on
-        par->force[j].x = 0;
-        par->force[j].y = 0;
-        par->force[j].z = 0;
+        create_perpend_vector(&(par->position), &res);
+        scalar_multiply(ang_vel/norm(&res), &res, &(par->ang_velocity));
+        cross_product(&(par->position), &(par->ang_velocity),
+                      &(par->velocity));
       }
 
-      // Calculate force
-      calculate_force(par, conf, Force_list);
+      // Calculate forces
+      calculate_force(pars, conf, Force_list);
   }
   return 0;
 }
 
-void free_particles(Particle *particle) {
-  free(particle->success);
-  free(particle->time);
-  free(particle->velocity_sq);
-  free(particle->force_mag);
-  free(particle->orientation);
-  free(particle->position);
-  free(particle->velocity);
-  free(particle->ang_velocity);
-  free(particle->force);
+void free_particles(Particles *particles) {
+  free(particles->particle);
 }
 
 void find_accelration(const double mass,
@@ -293,83 +285,49 @@ void update_orientation(const double radius,
   scalar_multiply(radius, pos, pos);
 }
 
-void save_particle_pair(FILE *fpointer, const Particle *particle) {
-  for (unsigned int i = 0; i < particle->no; ++i) {
+void save_particles(FILE *fpointer, const Particles *particles) {
+  for (unsigned int i = 0; i < particles->no; ++i) {
+    Particle *par = particles->particle + i;
     fprintf(fpointer,
             "%d\t%d\t%d\t%.10e\t"
             "%.10e\t%.10e\t%.10e\t"
             "%.10e\t%.10e\t%.10e\t"
             "%.10e\t%.10e\t%.10e\n",
-            particle->index, i,
-            particle->success[i],
-            particle->time[i],
-            particle->position[i].x,
-            particle->position[i].y,
-            particle->position[i].z,
-            particle->velocity[i].x,
-            particle->velocity[i].y,
-            particle->velocity[i].z,
-            particle->force[i].x,
-            particle->force[i].y,
-            particle->force[i].z);
+            particles->index, i,
+            par->success,
+            par->time,
+            par->position.x,
+            par->position.y,
+            par->position.z,
+            par->velocity.x,
+            par->velocity.y,
+            par->velocity.z,
+            par->force.x,
+            par->force.y,
+            par->force.z);
   }
 }
 
-void create_xyz_file(const int tindex, const Particle *particle) {
-  int index = particle->index;
-
-  char filename[80];
-  sprintf(filename, "./results/trajectories_%06d/traj_%09d.xyz", index, tindex);
-  FILE *ffile = fopen(filename, "w");
-  fprintf(ffile, "2\n");
-  fprintf(ffile, "Trajectory of particles\n");
-  for (unsigned int i = 0; i < particle->no; ++i) {
-    fprintf(ffile, "C %.10e %.10e %.10e %.10e %.10e %.10e %.10e %.10e %.10e\n",
-            particle->position[i].x,
-            particle->position[i].y,
-            particle->position[i].z,
-            particle->velocity[i].x,
-            particle->velocity[i].y,
-            particle->velocity[i].z,
-            particle->force[i].x,
-            particle->force[i].y,
-            particle->force[i].z);
-  }
-  fclose(ffile);
-}
-
-void simulate_particle(const struct config *conf,
+void simulate_particles(const struct config *conf,
                        const double radius,
                        const double *force_list,
-                       Particle *particle) {
+                       Particles *particles) {
 
   double dt = conf->dt;
   hid_t file_id;
-  const int parindex = particle->index;
+  const int parindex = particles->index;
   const int saveflag = conf->saveflag;
-  const int xyzflag = conf->xyzflag;
   const double mass = conf->mass;
 
-  Vector3D ang_vel = {0., 0., 0.};
   Vector3D acc = {0., 0., 0.};
+
+  Vector3D *ang_velocities = (Vector3D *)malloc(particles->no * sizeof(Vector3D));
 
   char ffname[80];
   // FILE *ffile = NULL;
   int tindex = 0;
 
-  printf("Simulating particle pairs %d\n", parindex);
-
-
-  if (xyzflag) {
-    char dirname[80];
-    sprintf(dirname, "./results/trajectories_%06d", parindex);
-
-    // Create result directory to keep results
-    struct stat st = {0};
-    if (stat(dirname, &st) == -1) {
-      mkdir(dirname, 0700);
-    }
-  }
+  // printf("Simulating particles %d\n", parindex);
 
   if (saveflag) {
     sprintf(ffname, "./results/trajectory_%06d.h5", parindex);
@@ -382,45 +340,63 @@ void simulate_particle(const struct config *conf,
   while (sucess || time < conf->max_time) {
     // if (tindex % 10000) printf("%d\t", tindex);
     if (saveflag)
-      save_timestep_to_hdf5(file_id, tindex, particle);
-    if (xyzflag)
-      create_xyz_file(tindex, particle);
+      save_timestep_to_hdf5(file_id, tindex, particles);
 
-    for (unsigned int i = 0; i < particle->no; ++i) {
-      if (!particle->success[i]) {
-        find_accelration(mass, radius, particle->position + i, particle->force + i,
+    for (unsigned int i = 0; i < particles->no; ++i) {
+      Particle *particle = particles->particle + i;
+
+      // Initialize acceleration to zero
+      acc.x = 0;
+      acc.y = 0;
+      acc.z = 0;
+
+      // Initialize temporary angular velocity to zero
+      ang_velocities[i].x = 0;
+      ang_velocities[i].y = 0;
+      ang_velocities[i].z = 0;
+
+      // First half-step
+      if (!particle->success) {
+        find_accelration(mass, radius, &(particle->position), &(particle->force),
                         &acc);
         // ω(t + Δt/2) =  ω(t) + Δt/2 ɑ(t)
-        update_angvel(dt/2.0, particle->ang_velocity + i, &acc, &ang_vel);
+        update_angvel(dt/2.0, &(particle->ang_velocity), &acc, ang_velocities + i);
         // q(t+Δt) = q(t) + Δt/2 q(t)ω(t + Δt/2)
-        update_orientation(radius, dt, particle->orientation + i, &ang_vel, particle->position + i);
+        update_orientation(radius, dt, &(particle->orientation), ang_velocities + i, &(particle->position));
       }
     }
 
     // Find the force at half-step
-    calculate_force(particle, conf, force_list);
-    for (unsigned int i = 0; i < particle->no; ++i) {
-      if (!particle->success[i]) {
-        find_accelration(mass, radius, particle->position + i, particle->force + i,
+    calculate_force(particles, conf, force_list);
+
+    // Second half-step
+    for (unsigned int i = 0; i < particles->no; ++i) {
+      Particle *particle = particles->particle + i;
+      if (!particle->success) {
+        find_accelration(mass, radius, &(particle->position), &(particle->force),
                         &acc);
-        update_angvel(dt/2.0, &ang_vel, &acc, particle->ang_velocity + i);
-        cross_product(particle->position + i, particle->ang_velocity + i,
-                      particle->velocity + i);
-        particle->velocity_sq[i] = norm_sq(particle->velocity + i);
-        particle->time[i] += dt;
+        // ω(t + Δt) = w(t + Δt/2) + Δt/2 ɑ(t)
+        update_angvel(dt/2.0, ang_velocities + i, &acc, &(particle->ang_velocity));
+        // Set velocity; v = ω x r
+        cross_product(&(particle->position), &(particle->ang_velocity),
+                      &(particle->velocity));
+        particle->velocity_sq= norm_sq(&(particle->velocity));
+        particle->time += dt;
       }
     }
-    tindex += 1;
 
-    time = particle->time[0];
-    sucess = particle->success[0];
-    for (unsigned int i = 1; i < particle->no; ++i) {
-      sucess *= particle->success[i];
-      if (time < particle->time[i])
-        time = particle->time[i];
+    tindex += 1;
+    sucess = particles->particle->success;
+    for (unsigned int i = 1; i < particles->no; ++i) {
+      Particle *particle = particles->particle + i;
+      sucess *=  particle->success;
+      if (time < particle->time)
+        time = particle->time;
     }
   }
 
   if (saveflag)
     close_file(file_id);
+
+  free(ang_velocities);
 }

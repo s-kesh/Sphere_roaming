@@ -37,13 +37,13 @@ h5_dep = dependency('hdf5', language: 'c')
 
 # Build
 if omp_dep.found()
-   exe = executable('HeRoam',
+   executable('HeRoam',
             srcs,
             dependencies: [omp_dep, h5_dep],
             c_args: cflags,
             link_args: ldflags)
 else
-    exe = executable('HeRoam',
+    executable('HeRoam',
             srcs,
             dependencies: h5_dep,
             c_args: cflags,

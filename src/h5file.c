@@ -10,66 +10,105 @@
 #include <H5version.h>
 #include <stdio.h>
 
-herr_t write_1d_array(hid_t groupid, const char *name, hid_t type, void *data, hsize_t size) {
-    hsize_t dims[1] = {size};
-    hid_t dataspace_id = H5Screate_simple(1, dims, NULL);
-    hid_t dataset_id = H5Dcreate(groupid, name, type, dataspace_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+// Global HDF5 datatypes (defined once)
+static hid_t vector3d_type = -1;
+static hid_t quat_type = -1;
+static hid_t particle_type = -1;
 
-    herr_t status = H5Dwrite(dataset_id, type, H5S_ALL, H5S_ALL, H5P_DEFAULT, data);
 
-    H5Dclose(dataset_id);
-    H5Sclose(dataspace_id);
+// Function to initialize HDF5 datatypes
+static void initialize_hdf5_types() {
+    if (vector3d_type < 0) {
+        vector3d_type = H5Tcreate(H5T_COMPOUND, sizeof(Vector3D));
+        H5Tinsert(vector3d_type, "x", HOFFSET(Vector3D, x), H5T_NATIVE_DOUBLE);
+        H5Tinsert(vector3d_type, "y", HOFFSET(Vector3D, y), H5T_NATIVE_DOUBLE);
+        H5Tinsert(vector3d_type, "z", HOFFSET(Vector3D, z), H5T_NATIVE_DOUBLE);
+    }
+    if (quat_type < 0) {
+        quat_type = H5Tcreate(H5T_COMPOUND, sizeof(Quat));
+        H5Tinsert(quat_type, "a", HOFFSET(Quat, a), H5T_NATIVE_DOUBLE);
+        H5Tinsert(quat_type, "x", HOFFSET(Quat, x), H5T_NATIVE_DOUBLE);
+        H5Tinsert(quat_type, "y", HOFFSET(Quat, y), H5T_NATIVE_DOUBLE);
+        H5Tinsert(quat_type, "z", HOFFSET(Quat, z), H5T_NATIVE_DOUBLE);
+    }
+    if (particle_type < 0) {
+      particle_type = H5Tcreate(H5T_COMPOUND, sizeof(Particle));
+      H5Tinsert(particle_type, "index", HOFFSET(Particle, index),
+                H5T_NATIVE_UINT);
+      H5Tinsert(particle_type, "success", HOFFSET(Particle, success),
+                H5T_NATIVE_UINT);
+      H5Tinsert(particle_type, "time", HOFFSET(Particle, time),
+                H5T_NATIVE_DOUBLE);
+      H5Tinsert(particle_type, "force_mag", HOFFSET(Particle, force_mag),
+                H5T_NATIVE_DOUBLE);
+      H5Tinsert(particle_type, "velocity_sq", HOFFSET(Particle, velocity_sq),
+                H5T_NATIVE_DOUBLE);
+      H5Tinsert(particle_type, "orientation", HOFFSET(Particle, orientation),
+                quat_type);
+      H5Tinsert(particle_type, "position", HOFFSET(Particle, position),
+                vector3d_type);
+      H5Tinsert(particle_type, "velocity", HOFFSET(Particle, velocity),
+                vector3d_type);
+      H5Tinsert(particle_type, "ang_velocity", HOFFSET(Particle, ang_velocity),
+                vector3d_type);
+      H5Tinsert(particle_type, "force", HOFFSET(Particle, force),
+                vector3d_type);
+    }
+}
 
-    return status;
+// Function to free HDF5 datatypes
+static void cleanup_hdf5_types() {
+    if (vector3d_type >= 0) {
+        H5Tclose(vector3d_type);
+        vector3d_type = -1;
+    }
+    if (vector3d_type >= 0) {
+        H5Tclose(quat_type);
+        vector3d_type = -1;
+    }
+    if (particle_type >= 0) {
+        H5Tclose(particle_type);
+        particle_type = -1;
+    }
 }
 
 hid_t initialize_file(const char *filename) {
-    hid_t file_id;
-    file_id = H5Fcreate(filename, H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
-    if (file_id < 0) {
-        fprintf(stderr, "Error: Could not create HDF5 file %s\n", filename);
-        return 0;
-    }
-    return file_id;
+  hid_t file_id = H5Fcreate(filename, H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
+
+  // Initialize datatypes once
+  initialize_hdf5_types();
+
+  return file_id;
 }
 
+// Save timestep data
+herr_t save_timestep_to_hdf5(const hid_t file_id, const unsigned int step,
+                           const Particles *data) {
+  // printf("Step %d\n", (int)step);
 
+  // Create a group
+  char group_name[32];
+  snprintf(group_name, sizeof(group_name), "/Step_%u", step);
+  hid_t group_id =
+      H5Gcreate(file_id, group_name, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+  // Save particles
+  hsize_t dims[1];
+  dims[0] = data->no;
+  hid_t dataspace_id = H5Screate_simple(1, dims, NULL);
+  hid_t dataset_id =
+      H5Dcreate(group_id, "particles", particle_type, dataspace_id, H5P_DEFAULT,
+                H5P_DEFAULT, H5P_DEFAULT);
+  herr_t status = H5Dwrite(dataset_id, particle_type, H5S_ALL, H5S_ALL,
+                           H5P_DEFAULT, (void *)(data->particle));
+  H5Dclose(dataset_id);
+  H5Sclose(dataspace_id);
+  H5Gclose(group_id);
+  return(status);
+}
+
+// Close the HDF5 file
 void close_file(const hid_t file_id) {
+    cleanup_hdf5_types(); // Free HDF5 datatypes
     H5Fclose(file_id);
-}
-
-void save_timestep_to_hdf5(const hid_t file_id, const unsigned int step,
-                          const Particle *particles) {
-    // Create a group
-    char group_name[32];
-    snprintf(group_name, sizeof(group_name), "/Step_%u", step);
-    hid_t group_id = H5Gcreate(file_id, group_name, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-
-    // Save particle
-    unsigned int no = particles->no;
-    write_1d_array(group_id, "no",
-                   H5T_NATIVE_UINT, (void *)&(particles->no), 1);
-    write_1d_array(group_id, "index",
-                   H5T_NATIVE_UINT, (void *)&(particles->index), 1);
-    write_1d_array(group_id, "sucess",
-                   H5T_NATIVE_UINT, (void *)(particles->success), no);
-    write_1d_array(group_id, "time",
-                   H5T_NATIVE_DOUBLE, (void *)(particles->time), no);
-    write_1d_array(group_id, "velocity_sq",
-                   H5T_NATIVE_DOUBLE, (void *)(particles->velocity_sq), no);
-    write_1d_array(group_id, "force_mag",
-                   H5T_NATIVE_DOUBLE, (void *)(particles->force_mag), no);
-    write_1d_array(group_id, "orientation",
-                   H5T_NATIVE_DOUBLE, (void *)(particles->orientation), 4*no);
-    write_1d_array(group_id, "position",
-                   H5T_NATIVE_DOUBLE, (void *)(particles->position), 3*no);
-    write_1d_array(group_id, "velocity",
-                   H5T_NATIVE_DOUBLE, (void *)(particles->velocity), 3*no);
-    write_1d_array(group_id, "ang_velocity",
-                   H5T_NATIVE_DOUBLE, (void *)(particles->ang_velocity), 3*no);
-    write_1d_array(group_id, "force",
-                   H5T_NATIVE_DOUBLE, (void *)(particles->force), 3*no);
-
-    // Close the group and file
-    H5Gclose(group_id);
 }
