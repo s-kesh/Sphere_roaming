@@ -4,20 +4,18 @@
 /**
  * @brief Represents a 3D vector with x, y, and z components.
  */
-typedef struct {
-    double x; /**< X-component of the vector */
-    double y; /**< Y-component of the vector */
-    double z; /**< Z-component of the vector */
+typedef union {
+    struct { float x, y, z; };
+    float v[3];
 } Vector3D;
 
 /**
  * @brief Represents a quaternion with scalar (a) and vector (x, y, z) components.
  */
-typedef struct {
-    double a; /**< Scalar component of the quaternion */
-    double x; /**< X-component of the quaternion */
-    double y; /**< Y-component of the quaternion */
-    double z; /**< Z-component of the quaternion */
+typedef union {
+  struct { float scalar; Vector3D vec; };
+  struct { float a, x, y, z; };
+  float q[4];
 } Quat;
 
 /**
@@ -26,7 +24,7 @@ typedef struct {
  * @param[in] v2 Pointer to the second vector.
  * @return The distance between the two vectors.
  */
-double distance(const Vector3D *v1, const Vector3D *v2);
+float distance(const Vector3D *v1, const Vector3D *v2);
 
 /**
  * @brief Computes the squared Euclidean distance between two 3D vectors.
@@ -34,7 +32,7 @@ double distance(const Vector3D *v1, const Vector3D *v2);
  * @param[in] v2 Pointer to the second vector.
  * @return The squared distance between the two vectors.
  */
-double distance_sq(const Vector3D *v1, const Vector3D *v2);
+float distance_sq(const Vector3D *v1, const Vector3D *v2);
 
 /**
  * @brief Computes the cross product of two 3D vectors.
@@ -49,14 +47,14 @@ void cross_product(const Vector3D *v1, const Vector3D *v2, Vector3D *res);
  * @param[in] vec Pointer to the vector.
  * @return The norm of the vector.
  */
-double norm(const Vector3D *vec);
+float norm(const Vector3D *vec);
 
 /**
  * @brief Computes the squared norm of a 3D vector.
  * @param[in] vec Pointer to the vector.
  * @return The squared norm of the vector.
  */
-double norm_sq(const Vector3D *vec);
+float norm_sq(const Vector3D *vec);
 
 /**
  * @brief Normalizes a 3D vector.
@@ -71,7 +69,7 @@ void normalize(const Vector3D *vec, Vector3D *res);
  * @param[in] vec Pointer to the vector.
  * @param[out] res Pointer to the result vector.
  */
-void scalar_multiply(const double scalar, const Vector3D *vec, Vector3D *res);
+void scalar_multiply(const float scalar, const Vector3D *vec, Vector3D *res);
 
 /**
  * @brief Adds two 3D vectors.
@@ -87,7 +85,7 @@ void add_vectors(const Vector3D *v1, const Vector3D *v2, Vector3D *res);
  * @param[in] v2 Pointer to the second vector.
  * @return The dot product of the two vectors.
  */
-double dot_product(const Vector3D *v1, const Vector3D *v2);
+float dot_product(const Vector3D *v1, const Vector3D *v2);
 
 /**
  * @brief Rotates a vector around a specified axis by a given angle.
@@ -96,7 +94,7 @@ double dot_product(const Vector3D *v1, const Vector3D *v2);
  * @param[in] angle Rotation angle in radians.
  * @param[out] result Pointer to the result vector.
  */
-void rotate_vector(const Vector3D *v, const Vector3D *axis, const double angle, Vector3D *result);
+void rotate_vector(const Vector3D *v, const Vector3D *axis, const float angle, Vector3D *result);
 
 /**
  * @brief Creates a vector perpendicular to the input vector.
@@ -132,7 +130,7 @@ void quat_add(const Quat *q1, const Quat *q2, Quat *result);
  * @param[in] scalar The scalar value.
  * @param[out] result Pointer to the resulting quaternion.
  */
-void quat_scalar_multiply(const Quat *q, const double scalar, Quat *result);
+void quat_scalar_multiply(const Quat *q, const float scalar, Quat *result);
 
 /**
  * @brief Computes the dot product of two quaternions.
@@ -140,21 +138,21 @@ void quat_scalar_multiply(const Quat *q, const double scalar, Quat *result);
  * @param[in] q2 Pointer to the second quaternion.
  * @return The dot product of the two quaternions.
  */
-double quat_dot(const Quat *q1, const Quat *q2);
+float quat_dot(const Quat *q1, const Quat *q2);
 
 /**
  * @brief Computes the norm of a quaternion.
  * @param[in] q Pointer to the quaternion.
  * @return The norm of the quaternion.
  */
-double quat_norm(const Quat *q);
+float quat_norm(const Quat *q);
 
 /**
  * @brief Computes the squared norm of a quaternion.
  * @param[in] q Pointer to the quaternion.
  * @return The squared norm of the quaternion.
  */
-double quat_norm_sq(const Quat *q);
+float quat_norm_sq(const Quat *q);
 
 /**
  * @brief Computes the product of two quaternions.

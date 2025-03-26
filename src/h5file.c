@@ -9,6 +9,7 @@
 #include <H5public.h>
 #include <H5version.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 // Global HDF5 datatypes (defined once)
 static hid_t vector3d_type = -1;
@@ -19,56 +20,47 @@ static hid_t particle_type = -1;
 // Function to initialize HDF5 datatypes
 static void initialize_hdf5_types() {
     if (vector3d_type < 0) {
-        vector3d_type = H5Tcreate(H5T_COMPOUND, sizeof(Vector3D));
-        H5Tinsert(vector3d_type, "x", HOFFSET(Vector3D, x), H5T_NATIVE_DOUBLE);
-        H5Tinsert(vector3d_type, "y", HOFFSET(Vector3D, y), H5T_NATIVE_DOUBLE);
-        H5Tinsert(vector3d_type, "z", HOFFSET(Vector3D, z), H5T_NATIVE_DOUBLE);
+        hsize_t dim_vector3d = 3;
+        vector3d_type = H5Tarray_create(H5T_NATIVE_FLOAT, 1, &dim_vector3d);
     }
     if (quat_type < 0) {
-        quat_type = H5Tcreate(H5T_COMPOUND, sizeof(Quat));
-        H5Tinsert(quat_type, "a", HOFFSET(Quat, a), H5T_NATIVE_DOUBLE);
-        H5Tinsert(quat_type, "x", HOFFSET(Quat, x), H5T_NATIVE_DOUBLE);
-        H5Tinsert(quat_type, "y", HOFFSET(Quat, y), H5T_NATIVE_DOUBLE);
-        H5Tinsert(quat_type, "z", HOFFSET(Quat, z), H5T_NATIVE_DOUBLE);
+        hsize_t dim_quat = 4;
+        quat_type = H5Tarray_create(H5T_NATIVE_FLOAT, 1, &dim_quat);
     }
     if (particle_type < 0) {
       particle_type = H5Tcreate(H5T_COMPOUND, sizeof(Particle));
+ 
       H5Tinsert(particle_type, "index", HOFFSET(Particle, index),
                 H5T_NATIVE_UINT);
       H5Tinsert(particle_type, "success", HOFFSET(Particle, success),
                 H5T_NATIVE_UINT);
       H5Tinsert(particle_type, "time", HOFFSET(Particle, time),
-                H5T_NATIVE_DOUBLE);
+                H5T_NATIVE_FLOAT);
       H5Tinsert(particle_type, "force_mag", HOFFSET(Particle, force_mag),
-                H5T_NATIVE_DOUBLE);
+                H5T_NATIVE_FLOAT);
       H5Tinsert(particle_type, "velocity_sq", HOFFSET(Particle, velocity_sq),
-                H5T_NATIVE_DOUBLE);
-      H5Tinsert(particle_type, "orientation", HOFFSET(Particle, orientation),
-                quat_type);
-      H5Tinsert(particle_type, "position", HOFFSET(Particle, position),
-                vector3d_type);
-      H5Tinsert(particle_type, "velocity", HOFFSET(Particle, velocity),
-                vector3d_type);
-      H5Tinsert(particle_type, "ang_velocity", HOFFSET(Particle, ang_velocity),
-                vector3d_type);
-      H5Tinsert(particle_type, "force", HOFFSET(Particle, force),
-                vector3d_type);
+                H5T_NATIVE_FLOAT);
+      H5Tinsert(particle_type, "orientation", HOFFSET(Particle, orientation.q), quat_type);
+      H5Tinsert(particle_type, "position", HOFFSET(Particle, position.v), vector3d_type);
+      H5Tinsert(particle_type, "velocity", HOFFSET(Particle, velocity.v), vector3d_type);
+      H5Tinsert(particle_type, "ang_velocity", HOFFSET(Particle, ang_velocity.v), vector3d_type);
+      H5Tinsert(particle_type, "force", HOFFSET(Particle, force.v), vector3d_type);
     }
 }
 
 // Function to free HDF5 datatypes
 static void cleanup_hdf5_types() {
     if (vector3d_type >= 0) {
-        H5Tclose(vector3d_type);
-        vector3d_type = -1;
+      H5Tclose(quat_type);
+      vector3d_type = -1;
     }
-    if (vector3d_type >= 0) {
-        H5Tclose(quat_type);
-        vector3d_type = -1;
+    if (quat_type >= 0) {
+      H5Tclose(quat_type);
+      quat_type = -1;
     }
     if (particle_type >= 0) {
-        H5Tclose(particle_type);
-        particle_type = -1;
+      H5Tclose(particle_type);
+      particle_type = -1;
     }
 }
 

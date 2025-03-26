@@ -17,13 +17,13 @@ struct config {
   int stop;
   int helium_number;
   long seed;
-  double mass;
-  double velocity;
-  double dt;
-  double max_time;
-  double icd_dist;
-  double force_grid;
-  double force_grid_start;
+  float mass;
+  float velocity;
+  float dt;
+  float max_time;
+  float icd_dist;
+  float force_grid;
+  float force_grid_start;
   long force_grid_length;
   char force_file[50];
 };
@@ -34,9 +34,9 @@ Structure to hold the particle properties.
 typedef struct {
   unsigned int index;
   unsigned int success;
-  double time;
-  double force_mag;
-  double velocity_sq;
+  float time;
+  float force_mag;
+  float velocity_sq;
   Quat orientation;
   Vector3D position;
   Vector3D velocity;
@@ -66,7 +66,7 @@ Function to generate random velocities according to the Maxwell-Boltzmann distri
 @param conf: Configuration structure containing the velocity.
 @return: Random velocity.
 */
-double generate_velocity(const struct config *conf);
+float generate_velocity(const struct config *conf);
 
 /*
 Function to calculate the force between the particles.
@@ -76,7 +76,7 @@ Function to calculate the force between the particles.
 */
 void calculate_force(Particles *particles,
                      const struct config *conf,
-                     const double *Force_list);
+                     const float *Force_list);
 
 /*
 Function to initialize the particles.
@@ -86,9 +86,9 @@ Function to initialize the particles.
 @param particles: Pointer to the particles structure.
 @return: 0 if successful, 1 otherwise.
 */
-int initialize_particles(const double radius,
+int initialize_particles(const float radius,
                              const struct config *conf,
-                             const double *Force_list,
+                             const float *Force_list,
                              Particles *particles);
 
 /*
@@ -105,8 +105,8 @@ Function to simulate the particles using the velocity verlet algorithm.
 @param particles: Pointer to the particles structure.
 */
 void simulate_particles(const struct config *conf,
-                       const double radius,
-                       const double *force_list,
+                       const float radius,
+                       const float *force_list,
                        Particles *particles);
 
 /*
@@ -117,7 +117,7 @@ Function to find the acceleration of the particle.
 @param force: Pointer to the force vector on the particle.
 @param acc: Pointer to the acceleration vector of the particle.
 */
-void find_accelration(const double mass, const double radius,
+void find_accelration(const float mass, const float radius,
                       const Vector3D *pos, const Vector3D *force,
                       Vector3D *acc);
 
@@ -128,7 +128,7 @@ Function to update the angular velocity of the particle.
 @param acc: Pointer to the acceleration vector of the particle.
 @param newangvel: Pointer to the new angular velocity vector.
 */
-void update_angvel(const double timestep, const Vector3D *oldangvel,
+void update_angvel(const float timestep, const Vector3D *oldangvel,
                    const Vector3D *acc, Vector3D *newangvel);
 
 /*
@@ -139,7 +139,7 @@ Function to update the orientation of the particle.
 @param angvel: Pointer to the angular velocity vector of the particle.
 @param pos: Pointer to the position vector of the particle.
 */
-void update_orientation(const double radius, const double timestep,
+void update_orientation(const float radius, const float timestep,
                         Quat *orient, const Vector3D *angvel,
                         Vector3D *pos);
 

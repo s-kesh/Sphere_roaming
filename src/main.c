@@ -27,13 +27,13 @@ void print_configuration(const struct config *conf) {
     printf("stop = %d\n", conf->stop);
     printf("helium_number = %d\n", conf->helium_number);
     printf("seed = %ld\n", conf->seed);
-    printf("mass = %lf\n", conf->mass);
-    printf("velocity = %lf\n", conf->velocity);
-    printf("dt = %lf\n", conf->dt);
-    printf("max_time = %lf\n", conf->max_time);
-    printf("icd_dist = %lf\n", conf->icd_dist);
-    printf("force_grid = %lf\n", conf->force_grid);
-    printf("force_grid_start = %lf\n", conf->force_grid_start);
+    printf("mass = %f\n", conf->mass);
+    printf("velocity = %f\n", conf->velocity);
+    printf("dt = %f\n", conf->dt);
+    printf("max_time = %f\n", conf->max_time);
+    printf("icd_dist = %f\n", conf->icd_dist);
+    printf("force_grid = %f\n", conf->force_grid);
+    printf("force_grid_start = %f\n", conf->force_grid_start);
     printf("force_grid_length = %ld\n", conf->force_grid_length);
     printf("force_file = %s\n", conf->force_file);
 }
@@ -45,9 +45,9 @@ Simulates the particles for a given helium number.
 @param Flist: Array containing the force values for different distances.
 */
 void simulate_for_number(const int helium_number, const struct config *conf,
-                         const double *Flist) {
+                         const float *Flist) {
   // Calculate radius of droplet
-  double radius = 2.22 * pow((double)helium_number, 1.0/3.0);
+  float radius = 2.22 * pow((float)helium_number, 1.0/3.0);
 
   // Array to hold particles
   // Number of particles = number_of_simulations * no_of_particles_in_one_simulation
@@ -128,13 +128,13 @@ int main(int argc, char *argv[]) {
   }
 
   // Read the force file and store the values into arrays
-  double* Flist = (double *)malloc(con.force_grid_length * sizeof(double)); // Singlet_Single array
-  double rF;
-  double yst; // Singlet_Triplet array
-  double ytt; // Triplet_Triplet array
+  float* Flist = (float *)malloc(con.force_grid_length * sizeof(float)); // Singlet_Single array
+  float rF;
+  float yst; // Singlet_Triplet array
+  float ytt; // Triplet_Triplet array
 
   int count = 0;
-  while (fscanf(fitfile, "%lf\t%lf\t%lf\t%lf\n", &rF, Flist + count, &yst, &ytt) == 4 && count < con.force_grid_length) {
+  while (fscanf(fitfile, "%f\t%f\t%f\t%f\n", &rF, Flist + count, &yst, &ytt) == 4 && count < con.force_grid_length) {
     count++;
   }
   fclose(fitfile);
@@ -150,7 +150,7 @@ int main(int argc, char *argv[]) {
   FILE *fffile = fopen(fffname, "w");
   fprintf(fffile, "Distance_Squared\tForce\n");
   for (int i = 0; i < count; ++i) {
-    fprintf(fffile, "%lf\t%.10e\n", con.force_grid_start + con.force_grid*i, Flist[i]);
+    fprintf(fffile, "%f\t%.10e\n", con.force_grid_start + con.force_grid*i, Flist[i]);
   }
 
   // Simulate for the given helium number
