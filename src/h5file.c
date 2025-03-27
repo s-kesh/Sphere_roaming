@@ -51,7 +51,7 @@ static void initialize_hdf5_types() {
 // Function to free HDF5 datatypes
 static void cleanup_hdf5_types() {
     if (vector3d_type >= 0) {
-      H5Tclose(quat_type);
+      H5Tclose(vector3d_type);
       vector3d_type = -1;
     }
     if (quat_type >= 0) {
