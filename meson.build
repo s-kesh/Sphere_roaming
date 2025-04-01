@@ -1,12 +1,18 @@
 project('HeRoam', 'c')
 
 # Source Files
-srcs = files(
+main_srcs = files(
      'src/main.c',
      'src/vector.c',
      'src/h5file.c',
      'src/simulation.c'
 )
+
+reader_srcs = files(
+     'src/reader.c',
+     'src/h5file.c',
+)
+
 
 # Build Type options
 debug_flags = ['-g', '-pg', '-Wall', '-Wextra']
@@ -35,17 +41,24 @@ endif
 omp_dep = dependency('openmp', required: false)
 h5_dep = dependency('hdf5', language: 'c')
 
-# Build
+# Build HeRoam binary
 if omp_dep.found()
    executable('HeRoam',
-            srcs,
+            main_srcs,
             dependencies: [omp_dep, h5_dep],
             c_args: cflags,
             link_args: ldflags)
 else
     executable('HeRoam',
-            srcs,
+            main_srcs,
             dependencies: h5_dep,
             c_args: cflags,
             link_args: ldflags)
 endif
+
+# Build h5read binary
+executable('h5read',
+          reader_srcs,
+          dependencies: [omp_dep, h5_dep],
+          c_args: cflags,
+          link_args: ldflags)
