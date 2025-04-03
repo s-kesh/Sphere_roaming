@@ -11,68 +11,151 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+#include <errno.h>
 
-int read_config(const char *filename, struct config *conf) {
-  FILE *ff = fopen(filename, "r");
-  if (!ff) {
-    perror("Error opening file");
-    return 0;
-  }
+// Helper function to trim whitespace
+static void trim_whitespace(char* str) {
+    // Trim leading space
+    char *start = str;
+    while(isspace((unsigned char)*start)) start++;
+    memmove(str, start, strlen(start) + 1);
 
-  char line[256];
-  while (fgets(line, sizeof(line), ff)) {
-  // Ignore comments and empty lines
-    if (line[0] == '#' || line[0] == '\n') {
-    continue;
-    }
-
-    // Parse key-value pairs
-    char key[50];
-    char value[50];
-    if (sscanf(line, "%49s = %49s", key, value) == 2) {
-      if (strcmp(key, "print") == 0)
-        conf->print = atoi(value);
-      else if (strcmp(key, "no") == 0)
-        conf->no = atoi(value);
-      else if (strcmp(key, "number") == 0)
-        conf->number = atoi(value);
-      else if (strcmp(key, "saveflag") == 0)
-        conf->saveflag = atoi(value);
-      else if (strcmp(key, "start") == 0)
-        conf->start = atoi(value);
-      else if (strcmp(key, "step") == 0)
-        conf->step = atoi(value);
-      else if (strcmp(key, "stop") == 0)
-        conf->stop = atoi(value);
-      else if (strcmp(key, "helium_number") == 0)
-        conf->helium_number = atoi(value);
-      else if (strcmp(key, "seed") == 0)
-        conf->seed = atoi(value);
-      else if (strcmp(key, "mass") == 0)
-        conf->mass = atof(value);
-      else if (strcmp(key, "velocity") == 0)
-        conf->velocity = atof(value);
-      else if (strcmp(key, "dt") == 0)
-        conf->dt = atof(value);
-      else if (strcmp(key, "max_time") == 0)
-        conf->max_time = atof(value);
-      else if (strcmp(key, "icd_dist") == 0)
-        conf->icd_dist = atof(value);
-      else if (strcmp(key, "force_grid") == 0)
-        conf->force_grid = atof(value);
-      else if (strcmp(key, "force_grid_start") == 0)
-        conf->force_grid_start = atof(value);
-      else if (strcmp(key, "force_grid_length") == 0)
-        conf->force_grid_length = atoi(value);
-      else if (strcmp(key, "force_file") == 0)
-        strcpy(conf->force_file, value);
-    }
-  }
-  fclose(ff);
-  return 1;
+    // Trim trailing space
+    char *end = str + strlen(str) - 1;
+    while(end >= str && isspace((unsigned char)*end)) end--;
+    *(end + 1) = '\0';
 }
 
-void calculate_force(Particles *pars,
+static int find_success(Particles *particles) {
+  int sucess = 0;
+  unsigned int counts_one = 0;
+  for (unsigned int i = 0; i < particles->no; ++i) {
+    Particle *particle = particles->particle + i;
+    counts_one += particle->success;
+  }
+  if (particles->no % 2 == 0)
+    sucess = (counts_one == particles->no);
+  else
+    sucess = (counts_one == particles->no - 1);
+
+  return sucess;
+}
+
+int read_config(const char *filename, struct config *conf) {
+    FILE *ff = fopen(filename, "r");
+    if (!ff) {
+        fprintf(stderr, "Error opening config file: %s\n", filename);
+        return 0;
+    }
+
+    char line[256];
+    int line_num = 0;
+
+    while (fgets(line, sizeof(line), ff)) {
+        line_num++;
+
+        // Remove inline comments
+        char *comment = strchr(line, '#');
+        if (comment) *comment = '\0';
+
+        // Trim whitespace and skip empty lines
+        trim_whitespace(line);
+        if (strlen(line) == 0) continue;
+
+        // Split key and value
+        char *eq = strchr(line, '=');
+        if (!eq) {
+            fprintf(stderr, "Invalid syntax at line %d: %s\n", line_num, line);
+            continue;
+        }
+
+        *eq = '\0';
+        char *key = line;
+        char *value = eq + 1;
+
+        // Trim whitespace from both key and value
+        trim_whitespace(key);
+        trim_whitespace(value);
+
+        // Parse values with error checking
+        if (strcmp(key, "print") == 0) {
+            conf->print = strtol(value, NULL, 10);
+        }
+        else if (strcmp(key, "hv") == 0) {
+            conf->hv = strtof(value, NULL);
+        }
+        else if (strcmp(key, "intensity") == 0) {
+            conf->intensity = strtof(value, NULL);
+        }
+        else if (strcmp(key, "cross_section") == 0) {
+            conf->cross_section = strtof(value, NULL);
+        }
+        else if (strcmp(key, "pulse_width") == 0) {
+            conf->pulse_width = strtof(value, NULL);
+        }
+        else if (strcmp(key, "number") == 0) {
+            conf->number = strtol(value, NULL, 10);
+        }
+        else if (strcmp(key, "saveflag") == 0) {
+            conf->saveflag = strtol(value, NULL, 10);
+        }
+        else if (strcmp(key, "start") == 0) {
+            conf->start = strtol(value, NULL, 10);
+        }
+        else if (strcmp(key, "step") == 0) {
+            conf->step = strtol(value, NULL, 10);
+        }
+        else if (strcmp(key, "stop") == 0) {
+            conf->stop = strtol(value, NULL, 10);
+        }
+        else if (strcmp(key, "helium_number") == 0) {
+            conf->helium_number = strtol(value, NULL, 10);
+        }
+        else if (strcmp(key, "seed") == 0) {
+            conf->seed = strtol(value, NULL, 10);
+        }
+        else if (strcmp(key, "mass") == 0) {
+            conf->mass = strtof(value, NULL);
+        }
+        else if (strcmp(key, "velocity") == 0) {
+            conf->velocity = strtof(value, NULL);
+        }
+        else if (strcmp(key, "dt") == 0) {
+            conf->dt = strtof(value, NULL);
+        }
+        else if (strcmp(key, "max_time") == 0) {
+            conf->max_time = strtof(value, NULL);
+        }
+        else if (strcmp(key, "icd_dist") == 0) {
+            conf->icd_dist = strtof(value, NULL);
+        }
+        else if (strcmp(key, "force_grid") == 0) {
+            conf->force_grid = strtof(value, NULL);
+        }
+        else if (strcmp(key, "force_grid_start") == 0) {
+            conf->force_grid_start = strtof(value, NULL);
+        }
+        else if (strcmp(key, "force_grid_length") == 0) {
+            conf->force_grid_length = strtol(value, NULL, 10);
+        }
+        else if (strcmp(key, "force_file") == 0) {
+            strncpy(conf->force_file, value, sizeof(conf->force_file) - 1);
+            conf->force_file[sizeof(conf->force_file) - 1] = '\0';
+        }
+        else {
+            fprintf(stderr, "Unknown configuration key '%s' at line %d\n", key, line_num);
+        }
+    }
+
+    fclose(ff);
+    return 1;
+}
+
+static void calculate_force(Particles *pars,
                      const struct config *conf,
                      const float *Force_list) {
 
@@ -83,7 +166,7 @@ void calculate_force(Particles *pars,
 
   unsigned int num = pars->no;
   float *dist_sq = (float *)malloc((num * (num - 1) / 2) * sizeof(float));
- 
+
   // Initialize forces on each particle to zero
   for (unsigned int j = 0; j < pars->no; ++j) {
     Particle *particle_j = pars->particle + j;
@@ -140,9 +223,9 @@ void calculate_force(Particles *pars,
   }
 
   free(dist_sq);
-} 
+}
 
-float generate_velocity(const struct config *conf) {
+static float generate_velocity(const struct config *conf) {
   float pi = 4 * atan(1);
 
   // Generate 4 uniformly distributed numbers
@@ -161,7 +244,27 @@ float generate_velocity(const struct config *conf) {
   return sqrt(z1*z1 + z2*z2 + z3*z3) * conf->velocity;
 }
 
-int initialize_particles(const float radius,
+static int generate_no_of_excitation(double lambda) {
+  /* Algorithim is taken from wikipedia
+     https://en.wikipedia.org/wiki/Poisson_distribution#Generating_Poisson-distributed_random_variables
+  */
+
+  // Init
+  double limit = exp(-1.0 * lambda);
+  int n = 0;
+  double p = 1.0;
+  double u = 0;
+
+  do {
+    n = n + 1;
+    u = (double)rand() / (double)RAND_MAX;
+    p = p * u;
+  } while (p > limit);
+
+  return n - 1;
+}
+
+int initialize_particles(const unsigned long long he_number,
                              const struct config *conf,
                              const float *Force_list,
                              Particles *particles) {
@@ -173,14 +276,29 @@ int initialize_particles(const float radius,
     srand(time(NULL));
 
   Particles *pars = NULL;
+  double scaling_factor = 6.241509074E-06;
+  double lambda = 0.;
+  lambda = (conf->intensity * conf->pulse_width * conf->cross_section) / conf->hv;
+  lambda = he_number * lambda;
+  lambda = scaling_factor * lambda;
+
+  // printf("Average number of excitation %lf\n", lambda);
+
+  double radius = 2.22 * pow((double)he_number, 1.0/3.0);
   for (int i = 0; i < conf->number; ++i) {
       pars = particles + i;
 
-      pars->no = conf->no;
+      // Generate number of excitation events
+      do {
+        pars->no = generate_no_of_excitation(lambda);
+      } while(pars->no < 1);
+
+      // printf("Number of excitation %d\n", pars->no);
+
       pars->index = i;
       // Initializing indivisual particles
-      pars->particle = (Particle *)malloc(conf->no * sizeof(Particle));
-      for (int j = 0; j < conf->no; ++j) {
+      pars->particle = (Particle *)malloc(pars->no * sizeof(Particle));
+      for (unsigned int j = 0; j < pars->no; ++j) {
         Particle *par = pars->particle + j;
         par->index = j;
         par->success = 0;
@@ -212,7 +330,7 @@ void free_particles(Particles *particles) {
   free(particles->particle);
 }
 
-void find_accelration(const float mass,
+static void find_accelration(const float mass,
                       const float radius,
                       const Vector3D *pos,
                       const Vector3D *force,
@@ -223,7 +341,7 @@ void find_accelration(const float mass,
   scalar_multiply(1.0 / mass / radius / radius, &torque, acc);
 }
 
-void update_angvel(const float timestep,
+static void update_angvel(const float timestep,
                    const Vector3D *oldangvel,
                    const Vector3D *acc,
                    Vector3D *newangvel) {
@@ -263,7 +381,7 @@ void update_orientation(const float radius,
 */
 
 // Velocity Verlet
-void update_orientation(const float radius,
+static void update_orientation(const float radius,
                         const float timestep,
                         Quat *orient,
                         const Vector3D *angvel,
@@ -308,7 +426,7 @@ void save_particles(FILE *fpointer, const Particles *particles) {
 }
 
 void simulate_particles(const struct config *conf,
-                       const float radius,
+                        const unsigned long long he_number,
                        const float *force_list,
                        Particles *particles) {
 
@@ -317,6 +435,7 @@ void simulate_particles(const struct config *conf,
   const int parindex = particles->index;
   const int saveflag = conf->saveflag;
   const float mass = conf->mass;
+  float radius = 2.22 * pow((float)he_number, 1.0/3.0);
 
   Vector3D acc;
   Vector3D *ang_velocities = (Vector3D *)malloc(particles->no * sizeof(Vector3D));
@@ -342,7 +461,7 @@ void simulate_particles(const struct config *conf,
     if (tindex % 1000 == 0) printf("%d\t%f\t%f\t%d\t%d\n",
       tindex, time, conf->max_time, sucess, time < conf->max_time);
     */
-    
+
     if (saveflag)
       save_timestep_to_hdf5(file_id, tindex, particles);
 
@@ -380,14 +499,14 @@ void simulate_particles(const struct config *conf,
     }
 
     tindex += 1;
-    sucess = particles->particle->success;
     time = particles->particle->time;
     for (unsigned int i = 1; i < particles->no; ++i) {
       Particle *particle = particles->particle + i;
-      sucess *=  particle->success;
       if (time < particle->time)
         time = particle->time;
     }
+
+    sucess = find_success(particles);
   }
 
   if (saveflag)

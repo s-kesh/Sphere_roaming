@@ -9,7 +9,10 @@ Structure to hold the configuration read from the configuration file.
 */
 struct config {
   int print;
-  int no; // no of particles for each droplet
+  float hv;
+  float intensity;
+  float cross_section;
+  float pulse_width;
   int number;
   int saveflag;
   int start;
@@ -61,32 +64,16 @@ Function to read the configuration file and store the values in the configuratio
 */
 int read_config(const char *filename, struct config *conf);
 
-/*
-Function to generate random velocities according to the Maxwell-Boltzmann distribution.
-@param conf: Configuration structure containing the velocity.
-@return: Random velocity.
-*/
-float generate_velocity(const struct config *conf);
-
-/*
-Function to calculate the force between the particles.
-@param particles: Pointer to the particles structure.
-@param conf: Configuration structure containing the force values.
-@param Force_list: Array containing the force values for different distances.
-*/
-void calculate_force(Particles *particles,
-                     const struct config *conf,
-                     const float *Force_list);
 
 /*
 Function to initialize the particles.
-@param radius: Radius of the droplet.
+@param he_number: Number of helium atoms
 @param conf: Configuration structure containing the configuration read from the file.
 @param Force_list: Array containing the force values for different distances.
 @param particles: Pointer to the particles structure.
 @return: 0 if successful, 1 otherwise.
 */
-int initialize_particles(const float radius,
+int initialize_particles(const unsigned long long he_number,
                              const struct config *conf,
                              const float *Force_list,
                              Particles *particles);
@@ -94,54 +81,20 @@ int initialize_particles(const float radius,
 /*
 Function to free the memory allocated for the particles.
 @param particles: Pointer to the particles structure.
-*/                             
+*/
 void free_particles(Particles *particles);
 
 /*
 Function to simulate the particles using the velocity verlet algorithm.
 @param conf: Configuration structure containing the configuration read from the file.
-@param radius: Radius of the droplet.
+@param he_number: Number of helium atoms
 @param force_list: Array containing the force values for different distances.
 @param particles: Pointer to the particles structure.
 */
 void simulate_particles(const struct config *conf,
-                       const float radius,
+                        const unsigned long long he_number,
                        const float *force_list,
                        Particles *particles);
-
-/*
-Function to find the acceleration of the particle.
-@param mass: Mass of the particle.
-@param radius: Radius of the droplet.
-@param pos: Pointer to the position vector of the particle.
-@param force: Pointer to the force vector on the particle.
-@param acc: Pointer to the acceleration vector of the particle.
-*/
-void find_accelration(const float mass, const float radius,
-                      const Vector3D *pos, const Vector3D *force,
-                      Vector3D *acc);
-
-/*
-Function to update the angular velocity of the particle.
-@param timestep: Timestep of the simulation.
-@param oldangvel: Pointer to the old angular velocity vector.
-@param acc: Pointer to the acceleration vector of the particle.
-@param newangvel: Pointer to the new angular velocity vector.
-*/
-void update_angvel(const float timestep, const Vector3D *oldangvel,
-                   const Vector3D *acc, Vector3D *newangvel);
-
-/*
-Function to update the orientation of the particle.
-@param radius: Radius of the droplet.
-@param timestep: Timestep of the simulation.
-@param orient: Pointer to the orientation quaternion of the particle.
-@param angvel: Pointer to the angular velocity vector of the particle.
-@param pos: Pointer to the position vector of the particle.
-*/
-void update_orientation(const float radius, const float timestep,
-                        Quat *orient, const Vector3D *angvel,
-                        Vector3D *pos);
 
 /*
 Function to save the particle properties in a file.

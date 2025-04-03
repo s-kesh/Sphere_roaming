@@ -19,7 +19,10 @@ Prints the configuration read from the configuration file.
 */
 void print_configuration(const struct config *conf) {
     printf("Configuration File Loaded\n");
-    printf("no = %d\n", conf->no);
+    printf("hv = %f\n", conf->hv);
+    printf("intensity = %f\n", conf->intensity);
+    printf("cross_section = %f\n", conf->cross_section);
+    printf("pulse_width = %f\n", conf->pulse_width);
     printf("number = %d\n", conf->number);
     printf("saveflag = %d\n", conf->saveflag);
     printf("start = %d\n", conf->start);
@@ -46,16 +49,13 @@ Simulates the particles for a given helium number.
 */
 void simulate_for_number(const int helium_number, const struct config *conf,
                          const float *Flist) {
-  // Calculate radius of droplet
-  float radius = 2.22 * pow((float)helium_number, 1.0/3.0);
 
   // Array to hold particles
-  // Number of particles = number_of_simulations * no_of_particles_in_one_simulation
-  // For simplicity conf->number = 1
-  Particles *particles = (Particles *)malloc(conf->number * conf->no * sizeof(Particles));
+  // Number of particles = number_of_simulations
+  Particles *particles = (Particles *)malloc(conf->number * sizeof(Particles));
 
   // Initialize random particleSimulation
-  initialize_particles(radius, conf, Flist, particles);
+  initialize_particles(helium_number, conf, Flist, particles);
 
   // Write particle properties in a file
   char ffname[80];
@@ -67,16 +67,15 @@ void simulate_for_number(const int helium_number, const struct config *conf,
           "X\tY\tZ\t"
           "VX\tVY\tVZ\t"
           "FX\tFY\tFZ\n");
-  for (int i = 0; i < conf->number; ++i) {
+  for (int i = 0; i < conf->number; ++i)
     save_particles(ffile, particles + i);
-  }
   fclose(ffile);
 
   // Simulate using velocity verlet
 
   #pragma omp parallel for
   for (int i = 0; i < conf->number; ++i)
-    simulate_particles(conf, radius, Flist, particles + i);
+    simulate_particles(conf, helium_number, Flist, particles + i);
 
   // Write particle properties in a file
   sprintf(ffname, "./results/particlefile_after_%d", helium_number);

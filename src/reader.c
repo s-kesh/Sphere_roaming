@@ -3,6 +3,7 @@
 #include <math.h>
 #include <omp.h>
 #include <time.h>
+#include <sys/stat.h>
 #include "h5file.h"
 
 #define PI 3.14159265358979323846
@@ -153,9 +154,25 @@ int main(int argc, char *argv[]) {
     generate_sphere_data(&lat_data, &lat_size, &lon_data, &lon_size);
 
     // Plot configuration
-    const char *colors[] = {"#FF0000", "#FF007F", "#FF00FF", "#7F00FF", "#0000FF"};
+    const char *colors[] = {
+        "#007ACC", // Azure Blue
+        "#FF4500", // Orange Red
+        "#32CD32", // Lime Green
+        "#FFD700", // Gold
+        "#8A2BE2", // Blue Violet
+        "#FF69B4", // Hot Pink
+        "#40E0D0", // Turquoise
+        "#DC143C", // Crimson
+        "#6495ED", // Cornflower Blue
+        "#FF8C00"  // Dark Orange
+    };
     const int num_colors = sizeof(colors)/sizeof(colors[0]);
 
+    // Check if output directory exists
+    struct stat st = {0};
+    if (stat("images", &st) == -1)
+        mkdir("images", 0700);
+    
     // Parallel plotting
     #pragma omp parallel for schedule(dynamic)
     for (hsize_t t = 0; t < num_time; t += plot_time_step) {
