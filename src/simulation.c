@@ -162,7 +162,6 @@ static void calculate_force(Particles *pars,
   const float inv_grid_size = 1.0 / conf->force_grid;
   const float force_start = conf->force_grid_start;
   const float icd_dist2 = conf->icd_dist*conf->icd_dist;
-  // const float max_dist_sq = conf->force_grid_start + (conf->force_grid_length - 2) * conf->force_grid;
 
   unsigned int num = pars->no;
   float *dist_sq = (float *)malloc((num * (num - 1) / 2) * sizeof(float));
@@ -173,7 +172,7 @@ static void calculate_force(Particles *pars,
     particle_j->force.x = 0.0;
     particle_j->force.y = 0.0;
     particle_j->force.z = 0.0;
-    particle_j->force_mag = 0.0;
+    particle_j->force_mag = 0.0f;
   }
 
   for (unsigned int j = 0; j < pars->no; ++j) {
@@ -181,13 +180,20 @@ static void calculate_force(Particles *pars,
     Particle *particle_j = pars->particle + j;
     if (particle_j->success) continue;
 
+    const float pjx = particle_j->position.x;
+    const float pjy = particle_j->position.y;
+    const float pjz = particle_j->position.z;
+
     // If pair of j,k is close to each other
     // Set success flag to 1
     for (unsigned int k = j + 1; k < pars->no; ++k) {
       Particle *particle_k = pars->particle + k;
       if (particle_k->success) continue;
+      const float xx = pjx - particle_k->position.x;
+      const float yy = pjy - particle_k->position.y;
+      const float zz = pjz - particle_k->position.z;
       unsigned int index = j*num + k - (j + 1)*(j + 2)/2;
-      dist_sq[index] = distance_sq(&(particle_j->position), &(particle_k->position));
+      dist_sq[index] = xx*xx + yy*yy + zz*zz;
       if (dist_sq[index] < icd_dist2) {
         particle_j->success = 1;
         particle_k->success = 1;
@@ -200,9 +206,9 @@ static void calculate_force(Particles *pars,
     Particle *particle_j = pars->particle + j;
     if (particle_j->success) continue;
     Vector3D f;
-    f.x = 0;
-    f.y = 0;
-    f.z = 0;
+    const float pjx = particle_j->position.x;
+    const float pjy = particle_j->position.y;
+    const float pjz = particle_j->position.z;
 
     for (unsigned int k = j + 1; k < pars->no; ++k) {
       Particle *particle_k = pars->particle + k;
@@ -212,11 +218,15 @@ static void calculate_force(Particles *pars,
       int d_index = (int)((d - force_start) * inv_grid_size);
       if (d_index < conf->force_grid_length) {
         float scale = Force_list[d_index] / sqrt(d);
-        for (unsigned index = 0; index < 3; ++index) {
-          f.v[index] = scale * (particle_j->position.v[index] - particle_k->position.v[index]);
-          particle_j->force.v[index] += f.v[index];
-          particle_k->force.v[index] -= f.v[index];
-        }
+	f.x = scale * (pjx - particle_k->position.x);
+	f.y = scale * (pjy - particle_k->position.y);
+	f.z = scale * (pjz - particle_k->position.z);
+        particle_j->force.x += f.x;
+        particle_j->force.y += f.y;
+        particle_j->force.z += f.z;
+        particle_k->force.x -= f.x;
+        particle_k->force.y -= f.y;
+        particle_k->force.z -= f.z;
       }
     }
     particle_j->force_mag = norm(&(particle_j->force));

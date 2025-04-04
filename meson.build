@@ -17,7 +17,8 @@ reader_srcs = files(
 # Build Type options
 debug_flags = ['-g', '-pg', '-Wall', '-Wextra']
 optimized_flags = ['-O3', '-march=native', '-Wall', '-Wextra',
-                    '-fopt-info-vec-optimized', '-fmax-errors=5']
+                    '-fopt-info-vec-optimized', '-fmax-errors=5',
+                    '-ffast-math', '-funroll-loops']
 
 # Flags based on buildtype
 if get_option('buildtype') == 'debug'
@@ -27,8 +28,8 @@ elif get_option('buildtype') == 'release'
 endif
 
 # Linker flags
-debug_ldflags = ['-pg', '-lm', '-lgsl', '-lgslcblas']
-optimized_ldflags = ['-lm', '-lgsl', '-lgslcblas']
+debug_ldflags = ['-pg', '-lm']
+optimized_ldflags = ['-lm']
 
 # Flags based on buildtype
 if get_option('buildtype') == 'debug'
