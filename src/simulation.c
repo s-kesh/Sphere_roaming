@@ -1,129 +1,283 @@
 #include "simulation.h"
 #include "vector.h"
+#include "h5file.h"
+
+#include <H5Ipublic.h>
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 #include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+#include <errno.h>
+
+// Helper function to trim whitespace
+static void trim_whitespace(char* str) {
+    // Trim leading space
+    char *start = str;
+    while(isspace((unsigned char)*start)) start++;
+    memmove(str, start, strlen(start) + 1);
+
+    // Trim trailing space
+    char *end = str + strlen(str) - 1;
+    while(end >= str && isspace((unsigned char)*end)) end--;
+    *(end + 1) = '\0';
+}
+
+static int find_success(Particles *particles) {
+  int sucess = 0;
+  unsigned int counts_one = 0;
+  for (unsigned int i = 0; i < particles->no; ++i) {
+    Particle *particle = particles->particle + i;
+    counts_one += particle->success;
+  }
+  if (particles->no % 2 == 0)
+    sucess = (counts_one == particles->no);
+  else
+    sucess = (counts_one == particles->no - 1);
+
+  return sucess;
+}
 
 int read_config(const char *filename, struct config *conf) {
-  FILE *ff = fopen(filename, "r");
-  if (!ff) {
-    perror("Error opening file");
-    return 0;
-  }
-
-  char line[256];
-  while (fgets(line, sizeof(line), ff)) {
-  // Ignore comments and empty lines
-    if (line[0] == '#' || line[0] == '\n') {
-    continue;
+    FILE *ff = fopen(filename, "r");
+    if (!ff) {
+        fprintf(stderr, "Error opening config file: %s\n", filename);
+        return 0;
     }
 
-    // Parse key and value
-    char key[50];
-    char value[50];
-    if (sscanf(line, "%49s = %49s", key, value) == 2) {
-      if (strcmp(key, "print") == 0)
-        conf->print = atoi(value);
-      else if (strcmp(key, "number") == 0)
-        conf->number = atoi(value);
-      else if (strcmp(key, "saveflag") == 0)
-        conf->saveflag = atoi(value);
-      else if (strcmp(key, "xyzflag") == 0)
-        conf->xyzflag = atoi(value);
-      else if (strcmp(key, "start") == 0)
-        conf->start = atoi(value);
-      else if (strcmp(key, "step") == 0)
-        conf->step = atoi(value);
-      else if (strcmp(key, "stop") == 0)
-        conf->stop = atoi(value);
-      else if (strcmp(key, "helium_number") == 0)
-        conf->helium_number = atoi(value);
-      else if (strcmp(key, "seed") == 0)
-        conf->seed = atoi(value);
-      else if (strcmp(key, "mass") == 0)
-        conf->mass = atof(value);
-      else if (strcmp(key, "velocity") == 0)
-        conf->velocity = atof(value);
-      else if (strcmp(key, "velratio") == 0)
-        conf->velratio = atof(value);
-      else if (strcmp(key, "dt") == 0)
-        conf->dt = atof(value);
-      else if (strcmp(key, "max_time") == 0)
-        conf->max_time = atof(value);
-      else if (strcmp(key, "icd_dist") == 0)
-        conf->icd_dist = atof(value);
-      else if (strcmp(key, "force_grid") == 0)
-        conf->force_grid = atof(value);
-      else if (strcmp(key, "force_grid_start") == 0)
-        conf->force_grid_start = atof(value);
-      else if (strcmp(key, "force_grid_length") == 0)
-        conf->force_grid_length = atoi(value);
-      else if (strcmp(key, "force_file") == 0)
-        strcpy(conf->force_file, value);
+    char line[256];
+    int line_num = 0;
+
+    while (fgets(line, sizeof(line), ff)) {
+        line_num++;
+
+        // Remove inline comments
+        char *comment = strchr(line, '#');
+        if (comment) *comment = '\0';
+
+        // Trim whitespace and skip empty lines
+        trim_whitespace(line);
+        if (strlen(line) == 0) continue;
+
+        // Split key and value
+        char *eq = strchr(line, '=');
+        if (!eq) {
+            fprintf(stderr, "Invalid syntax at line %d: %s\n", line_num, line);
+            continue;
+        }
+
+        *eq = '\0';
+        char *key = line;
+        char *value = eq + 1;
+
+        // Trim whitespace from both key and value
+        trim_whitespace(key);
+        trim_whitespace(value);
+
+        // Parse values with error checking
+        if (strcmp(key, "print") == 0) {
+            conf->print = strtol(value, NULL, 10);
+        }
+        else if (strcmp(key, "hv") == 0) {
+            conf->hv = strtof(value, NULL);
+        }
+        else if (strcmp(key, "intensity") == 0) {
+            conf->intensity = strtof(value, NULL);
+        }
+        else if (strcmp(key, "cross_section") == 0) {
+            conf->cross_section = strtof(value, NULL);
+        }
+        else if (strcmp(key, "pulse_width") == 0) {
+            conf->pulse_width = strtof(value, NULL);
+        }
+        else if (strcmp(key, "number") == 0) {
+            conf->number = strtol(value, NULL, 10);
+        }
+        else if (strcmp(key, "saveflag") == 0) {
+            conf->saveflag = strtol(value, NULL, 10);
+        }
+        else if (strcmp(key, "start") == 0) {
+            conf->start = strtol(value, NULL, 10);
+        }
+        else if (strcmp(key, "step") == 0) {
+            conf->step = strtol(value, NULL, 10);
+        }
+        else if (strcmp(key, "stop") == 0) {
+            conf->stop = strtol(value, NULL, 10);
+        }
+        else if (strcmp(key, "helium_number") == 0) {
+            conf->helium_number = strtol(value, NULL, 10);
+        }
+        else if (strcmp(key, "seed") == 0) {
+            conf->seed = strtol(value, NULL, 10);
+        }
+        else if (strcmp(key, "mass") == 0) {
+            conf->mass = strtof(value, NULL);
+        }
+        else if (strcmp(key, "velocity") == 0) {
+            conf->velocity = strtof(value, NULL);
+        }
+        else if (strcmp(key, "dt") == 0) {
+            conf->dt = strtof(value, NULL);
+        }
+        else if (strcmp(key, "max_time") == 0) {
+            conf->max_time = strtof(value, NULL);
+        }
+        else if (strcmp(key, "icd_dist") == 0) {
+            conf->icd_dist = strtof(value, NULL);
+        }
+        else if (strcmp(key, "force_grid") == 0) {
+            conf->force_grid = strtof(value, NULL);
+        }
+        else if (strcmp(key, "force_grid_start") == 0) {
+            conf->force_grid_start = strtof(value, NULL);
+        }
+        else if (strcmp(key, "force_grid_length") == 0) {
+            conf->force_grid_length = strtol(value, NULL, 10);
+        }
+        else if (strcmp(key, "force_file") == 0) {
+            strncpy(conf->force_file, value, sizeof(conf->force_file) - 1);
+            conf->force_file[sizeof(conf->force_file) - 1] = '\0';
+        }
+        else {
+            fprintf(stderr, "Unknown configuration key '%s' at line %d\n", key, line_num);
+        }
+    }
+
+    fclose(ff);
+    return 1;
+}
+
+static void calculate_force(Particles *pars,
+                     const struct config *conf,
+                     const float *Force_list) {
+
+  const float inv_grid_size = 1.0 / conf->force_grid;
+  const float force_start = conf->force_grid_start;
+  const float icd_dist2 = conf->icd_dist*conf->icd_dist;
+
+  unsigned int num = pars->no;
+  float *dist_sq = (float *)malloc((num * (num - 1) / 2) * sizeof(float));
+
+  // Initialize forces on each particle to zero
+  for (unsigned int j = 0; j < pars->no; ++j) {
+    Particle *particle_j = pars->particle + j;
+    particle_j->force.x = 0.0;
+    particle_j->force.y = 0.0;
+    particle_j->force.z = 0.0;
+    particle_j->force_mag = 0.0f;
+  }
+
+  for (unsigned int j = 0; j < pars->no; ++j) {
+    // Take a pointer to particle j
+    Particle *particle_j = pars->particle + j;
+    if (particle_j->success) continue;
+
+    const float pjx = particle_j->position.x;
+    const float pjy = particle_j->position.y;
+    const float pjz = particle_j->position.z;
+
+    // If pair of j,k is close to each other
+    // Set success flag to 1
+    for (unsigned int k = j + 1; k < pars->no; ++k) {
+      Particle *particle_k = pars->particle + k;
+      if (particle_k->success) continue;
+      const float xx = pjx - particle_k->position.x;
+      const float yy = pjy - particle_k->position.y;
+      const float zz = pjz - particle_k->position.z;
+      unsigned int index = j*num + k - (j + 1)*(j + 2)/2;
+      dist_sq[index] = xx*xx + yy*yy + zz*zz;
+      if (dist_sq[index] < icd_dist2) {
+        particle_j->success = 1;
+        particle_k->success = 1;
+      }
     }
   }
-  fclose(ff);
-  return 1;
+
+  // Calculate forces
+  for (unsigned int j = 0; j < pars->no - 1; ++j) {
+    Particle *particle_j = pars->particle + j;
+    if (particle_j->success) continue;
+    Vector3D f;
+    const float pjx = particle_j->position.x;
+    const float pjy = particle_j->position.y;
+    const float pjz = particle_j->position.z;
+
+    for (unsigned int k = j + 1; k < pars->no; ++k) {
+      Particle *particle_k = pars->particle + k;
+      if (particle_k->success) continue;
+      unsigned int index = j*num + k - (j + 1)*(j + 2)/2;
+      float d = dist_sq[index];
+      int d_index = (int)((d - force_start) * inv_grid_size);
+      if (d_index < conf->force_grid_length) {
+        float scale = Force_list[d_index] / sqrt(d);
+	f.x = scale * (pjx - particle_k->position.x);
+	f.y = scale * (pjy - particle_k->position.y);
+	f.z = scale * (pjz - particle_k->position.z);
+        particle_j->force.x += f.x;
+        particle_j->force.y += f.y;
+        particle_j->force.z += f.z;
+        particle_k->force.x -= f.x;
+        particle_k->force.y -= f.y;
+        particle_k->force.z -= f.z;
+      }
+    }
+    particle_j->force_mag = norm(&(particle_j->force));
+  }
+
+  free(dist_sq);
 }
 
-double distancesq_between_pair(const struct Particle_Pair *particle) {
-    // Position of particle 1
-    double x1   = particle->p1_pos.x;
-    double y1   = particle->p1_pos.y;
-    double z1   = particle->p1_pos.z;
-
-    // Position of particle 2
-    double x2   = particle->p2_pos.x;
-    double y2   = particle->p2_pos.y;
-    double z2   = particle->p2_pos.z;
-
-    double xx = (x1 - x2);
-    double yy = (y1 - y2);
-    double zz = (z1 - z2);
-
-    return xx*xx + yy*yy + zz*zz;
-}
-
-double generate_velocity(const struct config *conf) {
-  double pi = 4 * atan(1);
+static float generate_velocity(const struct config *conf) {
+  float pi = 4 * atan(1);
 
   // Generate 4 uniformly distributed numbers
-  double u1 = (double)rand() / RAND_MAX;
-  double u2 = (double)rand() / RAND_MAX;
-  double u3 = (double)rand() / RAND_MAX;
-  double u4 = (double)rand() / RAND_MAX;
+  float u1 = (float)rand() / RAND_MAX;
+  float u2 = (float)rand() / RAND_MAX;
+  float u3 = (float)rand() / RAND_MAX;
+  float u4 = (float)rand() / RAND_MAX;
 
   // Box-Muller algorithim
-  double z1 = sqrt(-2.0 * log(u1)) * cos(2.0 * pi * u2);
-  double z2 = sqrt(-2.0 * log(u1)) * sin(2.0 * pi * u2);
-  double z3 = sqrt(-2.0 * log(u3)) * cos(2.0 * pi * u4);
-  // double z4 = sqrt(-2.0 * log(u3)) * sin(2.0 * pi * u4);
+  // Generate 3 normally distributed numbers
+  float z1 = sqrt(-2.0 * log(u1)) * cos(2.0 * pi * u2);
+  float z2 = sqrt(-2.0 * log(u1)) * sin(2.0 * pi * u2);
+  float z3 = sqrt(-2.0 * log(u3)) * cos(2.0 * pi * u4);
+  // float z4 = sqrt(-2.0 * log(u3)) * sin(2.0 * pi * u4);
 
   return sqrt(z1*z1 + z2*z2 + z3*z3) * conf->velocity;
 }
 
-int initialize_particle_pair(const double radius,
+static int generate_no_of_excitation(double lambda) {
+  /* Algorithim is taken from wikipedia
+     https://en.wikipedia.org/wiki/Poisson_distribution#Generating_Poisson-distributed_random_variables
+  */
+
+  // Init
+  double limit = exp(-1.0 * lambda);
+  int n = 0;
+  double p = 1.0;
+  double u = 0;
+
+  do {
+    n = n + 1;
+    u = (double)rand() / (double)RAND_MAX;
+    p = p * u;
+  } while (p > limit);
+
+  return n - 1;
+}
+
+int initialize_particles(const unsigned long long he_number,
                              const struct config *conf,
-                             const double *force_list,
-                             struct Particle_Pair *particle) {
-  double dist = 0.0;
-  double inv_grid_size = 1.0 / conf->force_grid;
-  double force_start = conf->force_grid_start;
-
-  struct Particle_Pair *par = NULL;
-  Quat q1 = {0, 0, 0, 0};
-  Vector3D pos1 = {0, 0, 0};
-  Quat q2 = {0, 0, 0, 0};
-  Vector3D pos2 = {0, 0, 0};
-  Vector3D res = {0, 0, 0};
-
-  // const double velocity_sq = conf->velocity * conf->velocity * 1E-10; // Convert m/s to Å/fs
-  const double icd_dist2 = conf->icd_dist*conf->icd_dist;
-  const double max_dist_sq = conf->force_grid_start + (conf->force_grid_length - 2) * conf->force_grid;
+                             const float *Force_list,
+                             Particles *particles) {
 
   // Setup random number generator
   if (conf->seed)
@@ -131,90 +285,73 @@ int initialize_particle_pair(const double radius,
   else
     srand(time(NULL));
 
+  Particles *pars = NULL;
+  double scaling_factor = 6.241509074E-06;
+  double lambda = 0.;
+  lambda = (conf->intensity * conf->pulse_width * conf->cross_section) / conf->hv;
+  lambda = he_number * lambda;
+  lambda = scaling_factor * lambda;
+
+  // printf("Average number of excitation %lf\n", lambda);
+
+  double radius = 2.22 * pow((double)he_number, 1.0/3.0);
   for (int i = 0; i < conf->number; ++i) {
-      par = particle + i;
-      // Generate random Quan
-      quat_random(&q1);
-      quat_to_pos(&q1, &pos1);
-      scalar_multiply(radius, &pos1, &pos1);
+      pars = particles + i;
 
+      // Generate number of excitation events
       do {
-        quat_random(&q2);
-        quat_to_pos(&q2, &pos2);
-        scalar_multiply(radius, &pos2, &pos2);
-        dist = distance_sq(&pos1, &pos2);
-      } while (dist < icd_dist2);
+        pars->no = generate_no_of_excitation(lambda);
+      } while(pars->no < 1);
 
+      // printf("Number of excitation %d\n", pars->no);
 
-      // Set pair position
-      par->index = i;
-      par->success = 0;
-      par->time = 0;
-      par->distance_sq = dist;
+      pars->index = i;
+      // Initializing indivisual particles
+      pars->particle = (Particle *)malloc(pars->no * sizeof(Particle));
+      for (unsigned int j = 0; j < pars->no; ++j) {
+        Particle *par = pars->particle + j;
+        par->index = j;
+        par->success = 0;
 
-      par->p1_qua = q1;
-      par->p2_qua = q2;
-      par->p1_pos = pos1;
-      par->p2_pos = pos2;
+        // Generate Position
+        quat_random(&(par->orientation));
 
-      // Generate two random speed
-      double v1 = generate_velocity(conf) * 1E-5; // Convert m/s to Å/fs
-      double v2 = generate_velocity(conf) * 1E-5; // Convert m/s to Å/fs
-      par->p1_velocity_sq = v1*v1;
-      par->p2_velocity_sq = v2*v2;
-      double ang_vel1 = v1 / radius; // Unit fs¯¹
-      double ang_vel2 = v2 / radius; // Unit fs¯¹
+        quat_to_pos(&(par->orientation), &(par->position));
+        scalar_multiply(radius, &(par->position), &(par->position));
 
-      // Generate random angular velocity
-      // double ratio = conf->velratio;
-      // par->p1_velocity_sq = (2.0 / (ratio*ratio + 1)) * velocity_sq;
-      // par->p2_velocity_sq = (2.0 * ratio * ratio / (ratio*ratio + 1)) * velocity_sq;
-      // double ang_vel1 = sqrt(par->p1_velocity_sq) / radius; // Unit fs¯¹
-      // double ang_vel2 = sqrt(par->p2_velocity_sq) / radius; // Unit fs¯¹
-
-      // Need to find the perpenducular vector to position
-      create_perpend_vector(&(par->p1_pos), &res);
-      scalar_multiply(ang_vel1/norm(&res), &res, &(par->p1_angvel));
-      create_perpend_vector(&(par->p2_pos), &res);
-      scalar_multiply(ang_vel2/norm(&res), &res, &(par->p2_angvel));
-
-      // Calculate velocity
-      cross_product(&(par->p1_pos), &(par->p1_angvel), &(par->p1_vel));
-      cross_product(&(par->p2_pos), &(par->p2_angvel), &(par->p2_vel));
-
-      // Find force initially
-      if (particle->distance_sq > max_dist_sq) {
-        particle->force = 0;
-        particle->p1_force.x = 0.0;
-        particle->p1_force.y = 0.0;
-        particle->p1_force.z = 0.0;
-        particle->p2_force.x = 0.0;
-        particle->p2_force.y = 0.0;
-        particle->p2_force.z = 0.0;
+        // Generate velocity
+        float vel = generate_velocity(conf) * 1E-5; // Convert m/s to Å/fs
+        float ang_vel = vel / radius; // Unit fs¯¹
+        par->velocity_sq = vel*vel;
+        Vector3D res;
+        create_perpend_vector(&(par->position), &res);
+        scalar_multiply(ang_vel/norm(&res), &res, &(par->ang_velocity));
+        cross_product(&(par->position), &(par->ang_velocity),
+                      &(par->velocity));
       }
-      else {
-        particle->force = force_list[(int)((particle->distance_sq - force_start) * inv_grid_size)];
-        particle->p1_force.x = particle->force * (particle->p1_pos.x - particle->p2_pos.x) / sqrt(particle->distance_sq);
-        particle->p1_force.y = particle->force * (particle->p1_pos.y - particle->p2_pos.y) / sqrt(particle->distance_sq);
-        particle->p1_force.z = particle->force * (particle->p1_pos.z - particle->p2_pos.z) / sqrt(particle->distance_sq);
-        scalar_multiply(-1, &(particle->p1_force), &(particle->p2_force));
-      }
+
+      // Calculate forces
+      calculate_force(pars, conf, Force_list);
   }
   return 0;
 }
 
-void find_accelration(const double mass,
-                      const double radius,
+void free_particles(Particles *particles) {
+  free(particles->particle);
+}
+
+static void find_accelration(const float mass,
+                      const float radius,
                       const Vector3D *pos,
                       const Vector3D *force,
                       Vector3D *acc) {
 
-  Vector3D torque = {0, 0, 0};
+  Vector3D torque;
   cross_product(pos, force, &torque);
   scalar_multiply(1.0 / mass / radius / radius, &torque, acc);
 }
 
-void update_angvel(const double timestep,
+static void update_angvel(const float timestep,
                    const Vector3D *oldangvel,
                    const Vector3D *acc,
                    Vector3D *newangvel) {
@@ -225,16 +362,16 @@ void update_angvel(const double timestep,
 
 /*
 // SPIRAL
-void update_orientation(const double radius,
-                        const double timestep,
+void update_orientation(const float radius,
+                        const float timestep,
                         Quat *orient,
                         const Vector3D *angvel,
                         Vector3D *pos) {
   Quat tempquat = {0, 0, 0, 0};
   Quat res = {0, 0, 0, 0};
   Vector3D temp = {0, 0, 0};
-  double mag = norm(angvel);
-  double theta = timestep/2.0 * mag;
+  float mag = norm(angvel);
+  float theta = timestep/2.0 * mag;
 
   scalar_multiply(sin(theta)/mag, angvel, &temp);
   tempquat.a = cos(theta);
@@ -254,13 +391,17 @@ void update_orientation(const double radius,
 */
 
 // Velocity Verlet
-void update_orientation(const double radius,
-                        const double timestep,
+static void update_orientation(const float radius,
+                        const float timestep,
                         Quat *orient,
                         const Vector3D *angvel,
                         Vector3D *pos) {
-  Quat Omega = {0, angvel->x, angvel->y, angvel->z};
-  Quat temp = {0, 0, 0, 0};
+  Quat Omega;
+  Omega.a = 0;
+  Omega.x = angvel->x;
+  Omega.y = angvel->y;
+  Omega.z = angvel->z;
+  Quat temp;
   quat_product(&Omega, orient, &temp);
   quat_scalar_multiply(&temp, timestep/2.0, &temp);
   quat_add(orient, &temp, orient);
@@ -271,229 +412,115 @@ void update_orientation(const double radius,
   scalar_multiply(radius, pos, pos);
 }
 
-void save_particle_pair(FILE *fpointer, const struct Particle_Pair *particle) {
-  fprintf(fpointer,
-          "%d\t%d\t%.10lf\t%.10lf\t"
-          "%.10e\t%.10e\t%.10e\t"
-          "%.10e\t%.10e\t%.10e\t%.10e\t"
-          "%.10e\t%.10e\t%.10e\t%.10e\t"
-          "%.10e\t%.10e\t%.10e\t"
-          "%.10e\t%.10e\t%.10e\t"
-          "%.10e\t%.10e\t%.10e\t"
-          "%.10e\t%.10e\t%.10e\t"
-          "%.10e\t%.10e\t%.10e\t"
-          "%.10e\t%.10e\t%.10e\t"
-          "%.10e\t%.10e\t%.10e\t"
-          "%.10e\t%.10e\t%.10e\n",
-          particle->index, particle->success, particle->time,
-          particle->distance_sq,
-          particle->p1_velocity_sq,
-          particle->p2_velocity_sq,
-          particle->force,
-          particle->p1_qua.a,
-          particle->p1_qua.x,
-          particle->p1_qua.y,
-          particle->p1_qua.z,
-          particle->p2_qua.a,
-          particle->p2_qua.x,
-          particle->p2_qua.y,
-          particle->p2_qua.z,
-          particle->p1_pos.x,
-          particle->p1_pos.y,
-          particle->p1_pos.z,
-          particle->p2_pos.x,
-          particle->p2_pos.y,
-          particle->p2_pos.z,
-          particle->p1_vel.x,
-          particle->p1_vel.y,
-          particle->p1_vel.z,
-          particle->p2_vel.x,
-          particle->p2_vel.y,
-          particle->p2_vel.z,
-          particle->p1_force.x,
-          particle->p1_force.y,
-          particle->p1_force.z,
-          particle->p2_force.x,
-          particle->p2_force.y,
-          particle->p2_force.z,
-          particle->p1_angvel.x,
-          particle->p1_angvel.y,
-          particle->p1_angvel.z,
-          particle->p2_angvel.x,
-          particle->p2_angvel.y,
-          particle->p2_angvel.z);
-
+void save_particles(FILE *fpointer, const Particles *particles) {
+  for (unsigned int i = 0; i < particles->no; ++i) {
+    Particle *par = particles->particle + i;
+    fprintf(fpointer,
+            "%d\t%d\t%d\t%.10e\t"
+            "%.10e\t%.10e\t%.10e\t"
+            "%.10e\t%.10e\t%.10e\t"
+            "%.10e\t%.10e\t%.10e\n",
+            particles->index, i,
+            par->success,
+            par->time,
+            par->position.x,
+            par->position.y,
+            par->position.z,
+            par->velocity.x,
+            par->velocity.y,
+            par->velocity.z,
+            par->force.x,
+            par->force.y,
+            par->force.z);
+  }
 }
 
-void create_xyz_file(const int tindex, const struct Particle_Pair *particle) {
-  int index = particle->index;
+void simulate_particles(const struct config *conf,
+                        const unsigned long long he_number,
+                       const float *force_list,
+                       Particles *particles) {
 
-  char filename[80];
-  sprintf(filename, "./results/trajectories_%06d/traj_%09d.xyz", index, tindex);
-  FILE *ffile = fopen(filename, "w");
-  fprintf(ffile, "2\n");
-  fprintf(ffile, "Trajectory of particles\n");
-  fprintf(ffile, "C %.10e %.10e %.10e %.10e %.10e %.10e %.10e %.10e %.10e\n",
-          particle->p1_pos.x,
-          particle->p1_pos.y,
-          particle->p1_pos.z,
-          particle->p1_vel.x,
-          particle->p1_vel.y,
-          particle->p1_vel.z,
-          particle->p1_force.x,
-          particle->p1_force.y,
-          particle->p1_force.z);
-  fprintf(ffile, "C %.10e %.10e %.10e %.10e %.10e %.10e %.10e %.10e %.10e\n",
-          particle->p2_pos.x,
-          particle->p2_pos.y,
-          particle->p2_pos.z,
-          particle->p2_vel.x,
-          particle->p2_vel.y,
-          particle->p2_vel.z,
-          particle->p2_force.x,
-          particle->p2_force.y,
-          particle->p2_force.z);
-  fclose(ffile);
-}
-
-void simulate_particle(const struct config *conf,
-                       const double radius,
-                       const double *force_list,
-                       struct Particle_Pair *particle) {
-
-  double dt = conf->dt;
-  const int parindex = particle->index;
+  float dt = conf->dt;
+  hid_t file_id;
+  const int parindex = particles->index;
   const int saveflag = conf->saveflag;
-  const int xyzflag = conf->xyzflag;
-  const double icd_dist2 = conf->icd_dist * conf->icd_dist;
-  const double max_time = conf->max_time;
-  const double max_dist_sq = conf->force_grid_start + (conf->force_grid_length - 2) * conf->force_grid;
-  const double inv_grid_size = 1.0/conf->force_grid;
-  const double grid_start = conf->force_grid_start;
-  const double mass = conf->mass;
+  const float mass = conf->mass;
+  float radius = 2.22 * pow((float)he_number, 1.0/3.0);
 
-  Vector3D ang_vel1 = {0., 0., 0.};
-  Vector3D acc1 = {0., 0., 0.};
-  Vector3D ang_vel2 = {0., 0., 0.};
-  Vector3D acc2 = {0., 0., 0.};
+  Vector3D acc;
+  Vector3D *ang_velocities = (Vector3D *)malloc(particles->no * sizeof(Vector3D));
+  for (unsigned int i = 0; i < particles->no; ++i) {
+    ang_velocities[i].x = 0;
+    ang_velocities[i].y = 0;
+    ang_velocities[i].z = 0;
+  }
 
-  char ffname[80];
-  FILE *ffile = NULL;
+  char ffname[100];
   int tindex = 0;
 
-
-  if (xyzflag) {
-    char dirname[80];
-    sprintf(dirname, "./results/trajectories_%06d", parindex);
-
-    // Create result directory to keep results
-    struct stat st = {0};
-    if (stat(dirname, &st) == -1) {
-      mkdir(dirname, 0700);
-    }
-  }
-
   if (saveflag) {
-    sprintf(ffname, "./results/trajectory_%06d.%02d", parindex, (int)(conf->velratio*10));
-    ffile = fopen(ffname, "w");
-    fprintf(ffile,
-            "Index\tSuccess\tTime\tDistance_Sq\t"
-            "Vel_Sq_1\tVel_Sq_2\tForce\t"
-            "QA_1\tQX_1\tQY_1\tQZ_1\t"
-            "QA_2\tQX_2\tQY_2\tQZ_2\t"
-            "X_1\tY_1\tZ_1\t"
-            "X_2\tY_2\tZ_2\t"
-            "VX_1\tVY_1\tVZ_1\t"
-            "VX_2\tVY_2\tVZ_2\t"
-            "FX_1\tFY_1\tFZ_1\t"
-            "FX_2\tFY_2\tFZ_2\t"
-            "WX_1\tWY_1\tWZ_1\t"
-            "WX_2\tWY_2\tWZ_2\n");
+    sprintf(ffname, "./results/trajectory_%06d.h5", parindex);
+    file_id = initialize_file(ffname);
   }
 
-  particle->time = 0;
+  int sucess = 0;
+  float time = 0;
 
-  // Calculate initial torque and acceleration
-  if (fabs(particle->force) > 1E-10) {
-    dt = 1.0;
-    find_accelration(mass, radius, &(particle->p1_pos), &(particle->p1_force), &acc1);
-    find_accelration(mass, radius, &(particle->p2_pos), &(particle->p2_force), &acc2);
-  }
+  while (!sucess && time < conf->max_time) {
+    /*
+    if (tindex % 1000 == 0) printf("%d\t%f\t%f\t%d\t%d\n",
+      tindex, time, conf->max_time, sucess, time < conf->max_time);
+    */
 
-  while (particle->time < max_time && !particle->success) {
-    // Save trajectory in text file
     if (saveflag)
-      save_particle_pair(ffile, particle);
-    if (xyzflag)
-      create_xyz_file(tindex, particle);
+      save_timestep_to_hdf5(file_id, tindex, particles);
 
-    if (fabs(particle->force) > 1E-10) {
-      dt = 1.0;
-      // Step 1: Calculate angular velocity at timestamp Δt/2
-      update_angvel(dt/2.0, &(particle->p1_angvel), &acc1, &ang_vel1);
-      update_angvel(dt/2.0, &(particle->p2_angvel), &acc2, &ang_vel2);
-    } else {
-      ang_vel1.x = particle->p1_angvel.x;
-      ang_vel1.y = particle->p1_angvel.y;
-      ang_vel1.z = particle->p1_angvel.z;
-      ang_vel2.x = particle->p2_angvel.x;
-      ang_vel2.y = particle->p2_angvel.y;
-      ang_vel2.z = particle->p2_angvel.z;
+    for (unsigned int i = 0; i < particles->no; ++i) {
+      Particle *particle = particles->particle + i;
+
+      // First half-step
+      if (!particle->success) {
+        find_accelration(mass, radius, &(particle->position), &(particle->force),
+                        &acc);
+        // ω(t + Δt/2) =  ω(t) + Δt/2 ɑ(t)
+        update_angvel(dt/2.0, &(particle->ang_velocity), &acc, ang_velocities + i);
+        // q(t+Δt) = q(t) + Δt/2 q(t)ω(t + Δt/2)
+        update_orientation(radius, dt, &(particle->orientation), ang_velocities + i, &(particle->position));
+      }
     }
 
-    // Step 2: Update Orientation
-    update_orientation(radius, dt, &(particle->p1_qua),
-                       &ang_vel1, &(particle->p1_pos));
-    update_orientation(radius, dt, &(particle->p2_qua),
-                       &ang_vel2, &(particle->p2_pos));
+    // Find the force at half-step
+    calculate_force(particles, conf, force_list);
 
-    // Check if they met
-    particle->distance_sq = distancesq_between_pair(particle);
-    if (particle->distance_sq < icd_dist2)
-      particle->success = 1;
-
-    // Check force again
-    if (particle->distance_sq > max_dist_sq)
-      particle->force = 0;
-    else
-      particle->force = force_list[(int)((particle->distance_sq - grid_start) * inv_grid_size)];
-    if (fabs(particle->force) > 1E-10) {
-      // Step 4: Find the torque at new position
-      particle->p1_force.x = particle->force * (particle->p1_pos.x - particle->p2_pos.x) / sqrt(particle->distance_sq);
-      particle->p1_force.y = particle->force * (particle->p1_pos.y - particle->p2_pos.y) / sqrt(particle->distance_sq);
-      particle->p1_force.z = particle->force * (particle->p1_pos.z - particle->p2_pos.z) / sqrt(particle->distance_sq);
-      scalar_multiply(-1, &(particle->p1_force), &(particle->p2_force));
-
-      find_accelration(mass, radius, &(particle->p1_pos), &(particle->p1_force), &acc1);
-      find_accelration(mass, radius, &(particle->p2_pos), &(particle->p2_force), &acc2);
-
-      // Step 5: Calculate angular velocity at Δt
-      update_angvel(dt/2.0, &ang_vel1, &acc1, &(particle->p1_angvel));
-      update_angvel(dt/2.0, &ang_vel2, &acc2, &(particle->p2_angvel));
-    } else {
-      particle->p1_angvel.x = ang_vel1.x;
-      particle->p1_angvel.y = ang_vel1.y;
-      particle->p1_angvel.z = ang_vel1.z;
-      particle->p2_angvel.x = ang_vel2.x;
-      particle->p2_angvel.y = ang_vel2.y;
-      particle->p2_angvel.z = ang_vel2.z;
+    // Second half-step
+    for (unsigned int i = 0; i < particles->no; ++i) {
+      Particle *particle = particles->particle + i;
+      if (!particle->success) {
+        find_accelration(mass, radius, &(particle->position), &(particle->force),
+                        &acc);
+        // ω(t + Δt) = w(t + Δt/2) + Δt/2 ɑ(t)
+        update_angvel(dt/2.0, ang_velocities + i, &acc, &(particle->ang_velocity));
+        // Set velocity; v = ω x r
+        cross_product(&(particle->position), &(particle->ang_velocity),
+                      &(particle->velocity));
+        particle->velocity_sq= norm_sq(&(particle->velocity));
+        particle->time += dt;
+      }
     }
 
-    // Calculate new velocity
-    cross_product(&(particle->p1_pos), &(particle->p1_angvel), &(particle->p1_vel));
-    particle->p1_velocity_sq = norm_sq(&(particle->p1_vel));
-    cross_product(&(particle->p2_pos), &(particle->p2_angvel), &(particle->p2_vel));
-    particle->p2_velocity_sq = norm_sq(&(particle->p2_vel));
-
-    particle->time += dt;
     tindex += 1;
+    time = particles->particle->time;
+    for (unsigned int i = 1; i < particles->no; ++i) {
+      Particle *particle = particles->particle + i;
+      if (time < particle->time)
+        time = particle->time;
+    }
+
+    sucess = find_success(particles);
   }
 
-  if (conf->saveflag) {
-    save_particle_pair(ffile, particle);
-    fclose(ffile);
-  }
+  if (saveflag)
+    close_file(file_id);
 
-  if (conf->xyzflag)
-    create_xyz_file(tindex, particle);
+  free(ang_velocities);
 }

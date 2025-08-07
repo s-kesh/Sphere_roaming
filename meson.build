@@ -1,16 +1,24 @@
 project('HeRoam', 'c')
 
 # Source Files
-srcs = files(
+main_srcs = files(
      'src/main.c',
      'src/vector.c',
+     'src/h5file.c',
      'src/simulation.c'
 )
+
+reader_srcs = files(
+     'src/reader.c',
+     'src/h5file.c',
+)
+
 
 # Build Type options
 debug_flags = ['-g', '-pg', '-Wall', '-Wextra']
 optimized_flags = ['-O3', '-march=native', '-Wall', '-Wextra',
-                    '-fopt-info-vec-optimized', '-fmax-errors=5']
+                    '-fopt-info-vec-optimized', '-fmax-errors=5',
+                    '-ffast-math', '-funroll-loops']
 
 # Flags based on buildtype
 if get_option('buildtype') == 'debug'
@@ -20,8 +28,8 @@ elif get_option('buildtype') == 'release'
 endif
 
 # Linker flags
-debug_ldflags = ['-pg', '-lm', '-lgsl', '-lgslcblas']
-optimized_ldflags = ['-lm', '-lgsl', '-lgslcblas']
+debug_ldflags = ['-pg', '-lm']
+optimized_ldflags = ['-lm']
 
 # Flags based on buildtype
 if get_option('buildtype') == 'debug'
@@ -32,17 +40,26 @@ endif
 
 # Dependencies
 omp_dep = dependency('openmp', required: false)
+h5_dep = dependency('hdf5', language: 'c')
 
-# Build
+# Build HeRoam binary
 if omp_dep.found()
-   exe = executable('HeRoam',
-            srcs,
-            dependencies: omp_dep,
+   executable('HeRoam',
+            main_srcs,
+            dependencies: [omp_dep, h5_dep],
             c_args: cflags,
             link_args: ldflags)
 else
-    exe = executable('HeRoam',
-            srcs,
+    executable('HeRoam',
+            main_srcs,
+            dependencies: h5_dep,
             c_args: cflags,
             link_args: ldflags)
 endif
+
+# Build h5read binary
+executable('h5read',
+          reader_srcs,
+          dependencies: [omp_dep, h5_dep],
+          c_args: cflags,
+          link_args: ldflags)

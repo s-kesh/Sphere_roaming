@@ -1,5 +1,4 @@
-.cache
-data
+.cache/*
 data/*
-.vscode/
-results/
+results/*
+.vscode/*
